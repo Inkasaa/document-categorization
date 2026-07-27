@@ -19,6 +19,7 @@ document-categorization/
 └── utils/
     ├── __init__.py              # Utils package constructor
     ├── data_loader.py           # Mock dataset loader for multi-language examples
+    ├── pipeline_engine.py       # Unified integration & batch processing engine (Phase 4)
     ├── text_preprocessing.py    # Multi-language text cleaning, language detection & tokenization
     └── transfer_learning.py     # DistilBERT tokenization & label encoding helpers
 ```
@@ -64,6 +65,13 @@ Provides the Phase 3 deep learning text classification model:
 * **TensorFlow Classifier**: Builds and compiles `TFDistilBertForSequenceClassification` with an Adam optimizer (e.g. learning rate `3e-5`) and Sparse Categorical Crossentropy loss.
 * **Custom Fine-Tuning**: Trains the model and serializes weights on disk (`models/distilbert_weights.h5`).
 * **Inference Pipeline**: Runs predicting function yielding class prediction and confidence scores.
+
+### 6. Pipeline Integration Engine (`utils/pipeline_engine.py`)
+Provides the Phase 4 unified integration and batch-processing optimization engine:
+* **Unified Pipeline Orchestration**: Sequentially runs preprocessing, classification, and metadata tagging on raw documents.
+* **Batch Optimization**: Features `process_batch(list_of_texts)` which processes multiple documents in a single optimized matrix execution pass on DistilBERT.
+* **Robust Weight-Loading Fallback**: Gracefully detects missing weights file and logs warning, falling back to un-fine-tuned multilingual base model parameters instead of crashing.
+* **Caching**: Stores loaded model architectures and preprocessors in-memory.
 
 ---
 
@@ -111,4 +119,9 @@ python run_pipeline.py
 ```bash
 PYTHONPATH=. python models/text_classifier.py
 ```
-This runs an end-to-end self-test on the mock dataset, executes two training epochs, saves weights to disk, and runs an inference prediction on a new HTML text snippet.
+
+### 3. Run Unified Parallel Batch Processing Pipeline (Phase 4)
+```bash
+PYTHONPATH=. python utils/pipeline_engine.py
+```
+This runs the full end-to-end multi-language integrated pipeline over the mock dataset in batch format and verifies the fallback capabilities of weight checkpoints.
