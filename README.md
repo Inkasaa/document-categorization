@@ -11,14 +11,16 @@ document-categorization/
 ├── .gitignore                   # Excludes environments, IDE configs, OS and caching noise
 ├── README.md                    # Project overview, installation, and run guide
 ├── requirements.txt             # Project requirements and packages
-├── run_pipeline.py              # Main runner/verification pipeline
+├── run_pipeline.py              # Phase 2 pipeline runner (Cleaning & NER Tagging)
 ├── models/
 │   ├── __init__.py              # Models package constructor
-│   └── tagger.py                # Context-aware tagger (NER + rule-based)
+│   ├── tagger.py                # Context-aware tagger (NER + rule-based)
+│   └── text_classifier.py       # Fine-tunable DistilBERT classifier (Phase 3)
 └── utils/
     ├── __init__.py              # Utils package constructor
     ├── data_loader.py           # Mock dataset loader for multi-language examples
-    └── text_preprocessing.py    # Multi-language text cleaning, language detection, & tokenization
+    ├── text_preprocessing.py    # Multi-language text cleaning, language detection & tokenization
+    └── transfer_learning.py     # DistilBERT tokenization & label encoding helpers
 ```
 
 ---
@@ -32,27 +34,36 @@ Lists dependencies required for processing, feature engineering, and modeling, i
 * `langdetect` for automatic language identification.
 * `spacy` for language-appropriate tokenization and NLP preprocessing.
 * `beautifulsoup4` for HTML stripping.
+* `transformers` (pinned to `<5.0.0` for TensorFlow modeling compatibility) & `tf-keras` (backward compatibility helper for Keras 3).
 
 ### 2. Mock Data Loader (`utils/data_loader.py`)
-Generates a simulated dataset with documents across several languages (English, Spanish, French) containing raw noise such as HTML markup, excess whitespace, symbols, and mixed casing to rigorously test the text preprocessing pipeline.
+Generates a simulated dataset with documents across several languages (English, Spanish, French) containing raw noise such as HTML markup, excess whitespace, symbols, and mixed casing to test the text preprocessing pipeline.
 
 ### 3. Text Preprocessing Utility (`utils/text_preprocessing.py`)
 Features a modular `TextPreprocessor` class that executes:
 * **HTML Cleaning**: Removes raw tags.
-* **Hashtag Removal**: Strips hashtags completely (e.g. `#finanzas`).
-* **Emoji/Symbol Filtering**: Strips out emojis and special symbol characters (Unicode category `'So'`).
+* **Hashtag Removal**: Strips hashtags completely.
+* **Emoji/Symbol Filtering**: Strips out emojis (Unicode category `'So'`).
 * **Punctuation Normalization**: Standardizes consecutive punctuation (e.g., `!!!` -> `!`).
 * **Trailing Cleanup**: Strips punctuation and trailing space at the end of the text.
 * **Language Detection**: Automatically determines the language of the clean snippet. Falls back to a default language (e.g., English) if input has no alphabetic content.
-* **Dynamic SpaCy Loading**: Maps detected languages to standard small pipelines (e.g., `en_core_web_sm` for English, `es_core_news_sm` for Spanish, `fr_core_news_sm` for French). Programmatically downloads the model if it is not installed locally.
-* **Stopword & Noise Filtering**: Tokenizes and strips out language-specific stopwords, punctuation, standalone numbers, and non-alphabetic elements.
-* **Lemmatization**: Normalizes words into their base forms (lemmas) for model consumption.
+* **Dynamic SpaCy Loading**: Maps detected languages to standard small pipelines (`en_core_web_sm`, `es_core_news_sm`, `fr_core_news_sm`).
+* **Stopword & Noise Filtering**: Tokenizes and strips out language-specific stopwords, punctuation, numbers, and non-alphabetic elements.
+* **Lemmatization**: Normalizes words into their base forms (lemmas).
 
 ### 4. Metadata Tagger Component (`models/tagger.py`)
 Implements a hybrid context-aware tagger (`DocumentTagger` class) combining:
 * **ML-based NER**: Runs Named Entity Recognition using SpaCy pipelines to extract core entities (Organizations, Persons, Locations, and Dates).
 * **Rule-based fallback keyword matching**: Appends domain-specific tags if specific keywords are detected within the document using regex word boundaries.
 * **Deduplication**: Resolves and returns unique, sorted tags.
+
+### 5. Transfer Learning & Classification (`utils/transfer_learning.py` & `models/text_classifier.py`)
+Provides the Phase 3 deep learning text classification model:
+* **Hugging Face Tokenizer**: Converts clean texts into input IDs and attention masks using a multilingual pretrained DistilBERT tokenizer (`distilbert-base-multilingual-cased`).
+* **Label Encoder**: Maps text categories into numeric label values and back.
+* **TensorFlow Classifier**: Builds and compiles `TFDistilBertForSequenceClassification` with an Adam optimizer (e.g. learning rate `3e-5`) and Sparse Categorical Crossentropy loss.
+* **Custom Fine-Tuning**: Trains the model and serializes weights on disk (`models/distilbert_weights.h5`).
+* **Inference Pipeline**: Runs predicting function yielding class prediction and confidence scores.
 
 ---
 
@@ -89,15 +100,15 @@ Implements a hybrid context-aware tagger (`DocumentTagger` class) combining:
 
 ---
 
-## Running the Verification Pipeline
+## Running the Verification Pipelines
 
-To run the integrated test pipeline and verify everything works correctly, execute:
+### 1. Run Preprocessing and NER Metadata Tagging (Phase 1 & 2)
 ```bash
 python run_pipeline.py
 ```
 
-The script will:
-1. Load the mock multi-lingual dataset.
-2. Initialize the preprocessor and tagger.
-3. Dynamically download any required SpaCy models that are missing.
-4. Process each document and display the true category, detected language, original text, cleaned text, tokens, and generated tags.
+### 2. Run DistilBERT Fine-Tuning and Classifier Inference (Phase 3)
+```bash
+PYTHONPATH=. python models/text_classifier.py
+```
+This runs an end-to-end self-test on the mock dataset, executes two training epochs, saves weights to disk, and runs an inference prediction on a new HTML text snippet.

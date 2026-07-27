@@ -147,3 +147,12 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Large Model Weights & Data Checkpoints
+*.h5
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.pb
