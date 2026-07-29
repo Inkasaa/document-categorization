@@ -65,14 +65,15 @@ class DistilBertClassifier:
         )
         logger.info("Model loaded successfully.")
 
-    def compile_model(self, learning_rate: float = 3e-5):
+    def compile_model(self, learning_rate: float = 3e-5, run_eagerly: bool = False):
         """
         Compiles the model with the Adam optimizer and Sparse Categorical Crossentropy loss.
         
         Args:
             learning_rate (float): Small learning rate typical for fine-tuning transformer weights.
+            run_eagerly (bool): If True, runs eager execution instead of building static graph.
         """
-        logger.info(f"Compiling Keras model with Adam optimizer (learning_rate={learning_rate})...")
+        logger.info(f"Compiling Keras model with Adam optimizer (learning_rate={learning_rate}, run_eagerly={run_eagerly})...")
         if hasattr(tf.keras.optimizers, "legacy"):
             logger.info("Using legacy Adam optimizer for Apple Silicon acceleration.")
             optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate)
@@ -83,7 +84,7 @@ class DistilBertClassifier:
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         metrics = [tf.keras.metrics.SparseCategoricalAccuracy("accuracy")]
         
-        self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+        self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics, run_eagerly=run_eagerly)
         logger.info("Model compilation complete.")
 
     def train(
@@ -216,7 +217,7 @@ class DistilBertClassifier:
         }
 
 
-def run_production_training(sample_size: int = 10000, epochs: int = 5, batch_size: int = 16):
+def run_production_training(sample_size: int = 10000, epochs: int = 5, batch_size: int = 16, run_eagerly: bool = False):
     """
     Ingests production records, cleans, tokenizes, runs fine-tuning,
     and performs detailed multi-language test evaluations.
@@ -225,6 +226,7 @@ def run_production_training(sample_size: int = 10000, epochs: int = 5, batch_siz
         sample_size (int): Total number of records to ingest.
         epochs (int): Number of training epochs.
         batch_size (int): Batch size used for training gradient steps.
+        run_eagerly (bool): If True, compiles the model in eager mode to avoid graph compilation delays.
     """
     print("\n" + "=" * 80)
     print(f"PHASE 3 PRODUCTION TRAINING & MULTI-LANGUAGE EVALUATION (Size: {sample_size}, Epochs: {epochs})")
@@ -285,7 +287,7 @@ def run_production_training(sample_size: int = 10000, epochs: int = 5, batch_siz
 
     # 6. Initialize, compile, and train the model for target epochs
     classifier = DistilBertClassifier(num_classes=num_classes, model_name=model_name)
-    classifier.compile_model(learning_rate=3e-5)
+    classifier.compile_model(learning_rate=3e-5, run_eagerly=run_eagerly)
 
     # Train model
     classifier.train(
@@ -348,10 +350,12 @@ if __name__ == "__main__":
     parser.add_argument("--sample_size", type=int, default=10000, help="Total production samples to load")
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
+    parser.add_argument("--run_eagerly", action="store_true", help="Compile and run eagerly to avoid graph compile delays")
     args = parser.parse_args()
     
     run_production_training(
         sample_size=args.sample_size,
         epochs=args.epochs,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
+        run_eagerly=args.run_eagerly
     )
