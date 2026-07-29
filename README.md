@@ -12,6 +12,9 @@ document-categorization/
 ├── README.md                    # Project overview, installation, and run guide
 ├── requirements.txt             # Project requirements and packages
 ├── run_pipeline.py              # Phase 2 pipeline runner (Cleaning & NER Tagging)
+├── app/
+│   ├── __init__.py              # Web App package constructor
+│   └── real_time_dashboard.py   # Streamlit visualization & telemetry dashboard (Phase 5)
 ├── models/
 │   ├── __init__.py              # Models package constructor
 │   ├── tagger.py                # Context-aware tagger (NER + rule-based)
@@ -36,6 +39,7 @@ Lists dependencies required for processing, feature engineering, and modeling, i
 * `spacy` for language-appropriate tokenization and NLP preprocessing.
 * `beautifulsoup4` for HTML stripping.
 * `transformers` (pinned to `<5.0.0` for TensorFlow modeling compatibility) & `tf-keras` (backward compatibility helper for Keras 3).
+* `streamlit` for the visualization dashboard UI.
 
 ### 2. Mock Data Loader (`utils/data_loader.py`)
 Generates a simulated dataset with documents across several languages (English, Spanish, French) containing raw noise such as HTML markup, excess whitespace, symbols, and mixed casing to test the text preprocessing pipeline.
@@ -72,6 +76,12 @@ Provides the Phase 4 unified integration and batch-processing optimization engin
 * **Batch Optimization**: Features `process_batch(list_of_texts)` which processes multiple documents in a single optimized matrix execution pass on DistilBERT.
 * **Robust Weight-Loading Fallback**: Gracefully detects missing weights file and logs warning, falling back to un-fine-tuned multilingual base model parameters instead of crashing.
 * **Caching**: Stores loaded model architectures and preprocessors in-memory.
+
+### 7. Interactive Visualization Dashboard (`app/real_time_dashboard.py`)
+Provides the Phase 5 interactive dashboard:
+* **Sleek Layout**: Users can paste document texts, click "Process Document", and view category predictions, language codes, execution latency, and generated tags (rendered as visual badges).
+* **Baseline Analytics**: Computes and updates metrics over the mock dataset on startup, rendering average latency and average model confidence KPI cards, alongside Category and Language distributions.
+* **Optimization Caching**: Uses `@st.cache_resource` to ensure models are loaded once to avoid reload overheads.
 
 ---
 
@@ -124,4 +134,9 @@ PYTHONPATH=. python models/text_classifier.py
 ```bash
 PYTHONPATH=. python utils/pipeline_engine.py
 ```
-This runs the full end-to-end multi-language integrated pipeline over the mock dataset in batch format and verifies the fallback capabilities of weight checkpoints.
+
+### 4. Run Streamlit Interactive Web Dashboard (Phase 5)
+```bash
+streamlit run app/real_time_dashboard.py --server.port 8505
+```
+Open your browser and navigate to `http://localhost:8505` to view the dashboard interface and interact with the pipeline.
