@@ -96,9 +96,10 @@ class DistilBertClassifier:
         epochs: int = 5,
         batch_size: int = 16,
         checkpoint_dir: str = "models/checkpoints"
-    ) -> tf.keras.callbacks.History:
+    ):
         """
-        Trains the classifier on tokenized inputs and labels, then saves model weights.
+        Trains the classifier on tokenized inputs and labels using a custom GradientTape loop.
+        Saves best checkpoint weights based on validation loss.
 
         Args:
             train_inputs (Dict[str, np.ndarray]): Training features containing input_ids and attention_mask.
@@ -108,9 +109,6 @@ class DistilBertClassifier:
             epochs (int): Number of training iterations.
             batch_size (int): Batch size used for gradient steps.
             checkpoint_dir (str): Directory path to save model weights and config files.
-
-        Returns:
-            tf.keras.callbacks.History: Training history metrics log.
         """
         logger.info(f"Starting production fine-tuning for {epochs} epochs (batch_size={batch_size})...")
         
@@ -122,46 +120,96 @@ class DistilBertClassifier:
         logger.info(f"Saving model configuration to '{checkpoint_dir}/config.json'...")
         self.model.config.save_pretrained(checkpoint_dir)
 
-        # Initialize Keras ModelCheckpoint callback to save the absolute best weights based on validation loss
-        checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-            filepath=checkpoint_path,
-            save_best_only=True,
-            save_weights_only=True,
-            monitor="val_loss",
-            mode="min",
-            verbose=1
-        )
+        # Prepare tf.data.Dataset batches
+        train_dataset = tf.data.Dataset.from_tensor_slices((
+            {
+                "input_ids": train_inputs["input_ids"],
+                "attention_mask": train_inputs["attention_mask"]
+            },
+            train_labels
+        )).shuffle(1000).batch(batch_size)
 
-        # Format inputs as dict structures
-        trn_inputs = {
-            "input_ids": train_inputs["input_ids"],
-            "attention_mask": train_inputs["attention_mask"]
-        }
-        vld_inputs = {
-            "input_ids": val_inputs["input_ids"],
-            "attention_mask": val_inputs["attention_mask"]
-        }
+        val_dataset = tf.data.Dataset.from_tensor_slices((
+            {
+                "input_ids": val_inputs["input_ids"],
+                "attention_mask": val_inputs["attention_mask"]
+            },
+            val_labels
+        )).batch(batch_size)
 
-        # Run Keras fit model pipeline
-        history = self.model.fit(
-            trn_inputs,
-            train_labels,
-            validation_data=(vld_inputs, val_labels),
-            epochs=epochs,
-            batch_size=batch_size,
-            callbacks=[checkpoint_callback],
-            verbose=1
-        )
-        logger.info("Training complete.")
+        best_val_loss = float("inf")
+        history_dict = {"loss": [], "accuracy": [], "val_loss": [], "val_accuracy": []}
+
+        # Loss function & Optimizer
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+
+        for epoch in range(epochs):
+            print(f"\nEpoch {epoch+1}/{epochs}")
+            logger.info(f"Epoch {epoch+1}/{epochs} starting...")
+            
+            # Epoch Metrics
+            epoch_loss = tf.keras.metrics.Mean()
+            epoch_acc = tf.keras.metrics.SparseCategoricalAccuracy()
+
+            # Batch iteration
+            for step, (x_batch, y_batch) in enumerate(train_dataset):
+                with tf.GradientTape() as tape:
+                    outputs = self.model(x_batch, training=True)
+                    logits = outputs.logits
+                    loss_value = loss_fn(y_batch, logits)
+                    # Add any internal losses (regularization, etc.)
+                    if self.model.losses:
+                        loss_value += tf.add_n(self.model.losses)
+
+                # Gradients calculation and weight update steps
+                grads = tape.gradient(loss_value, self.model.trainable_variables)
+                self.model.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
+
+                epoch_loss.update_state(loss_value)
+                epoch_acc.update_state(y_batch, logits)
+
+                if step % 5 == 0 or step == len(train_dataset) - 1:
+                    print(f"  Step {step}/{len(train_dataset)} - loss: {loss_value.numpy():.4f} - accuracy: {epoch_acc.result().numpy():.4f}")
+
+            # Validation metrics
+            val_loss = tf.keras.metrics.Mean()
+            val_acc = tf.keras.metrics.SparseCategoricalAccuracy()
+
+            for x_batch, y_batch in val_dataset:
+                outputs = self.model(x_batch, training=False)
+                logits = outputs.logits
+                val_loss_val = loss_fn(y_batch, logits)
+                
+                val_loss.update_state(val_loss_val)
+                val_acc.update_state(y_batch, logits)
+
+            train_l = float(epoch_loss.result().numpy())
+            train_a = float(epoch_acc.result().numpy())
+            val_l = float(val_loss.result().numpy())
+            val_a = float(val_acc.result().numpy())
+
+            print(f"Epoch {epoch+1} Metrics:")
+            print(f"  loss: {train_l:.4f} - accuracy: {train_a:.4f} - val_loss: {val_l:.4f} - val_accuracy: {val_a:.4f}")
+            logger.info(f"Epoch {epoch+1} - loss: {train_l:.4f} - accuracy: {train_a:.4f} - val_loss: {val_l:.4f} - val_accuracy: {val_a:.4f}")
+
+            history_dict["loss"].append(train_l)
+            history_dict["accuracy"].append(train_a)
+            history_dict["val_loss"].append(val_l)
+            history_dict["val_accuracy"].append(val_a)
+
+            # Save absolute best checkpoint weights
+            if val_l < best_val_loss:
+                best_val_loss = val_l
+                print(f"  val_loss improved to {val_l:.4f}. Saving best weights checkpoint...")
+                logger.info(f"Validation loss improved to {val_l:.4f}. Saving best weights checkpoint...")
+                self.model.save_weights(checkpoint_path)
 
         # Export training history to CSV
         history_path = os.path.join(checkpoint_dir, "training_history.csv")
         logger.info(f"Exporting training history to '{history_path}'...")
-        history_df = pd.DataFrame(history.history)
+        history_df = pd.DataFrame(history_dict)
         history_df.to_csv(history_path, index=False)
-        logger.info("Training history exported successfully.")
-
-        return history
+        logger.info("Training complete and history exported successfully.")
 
     def load_weights(self, weights_path: str):
         """
