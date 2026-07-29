@@ -1,30 +1,41 @@
 """
 Text Classifier Model (DistilBERT)
 ----------------------------------
-This module implements the Phase 3 Sequence Classification pipeline using TensorFlow/Keras
+This script implements the Phase 3 Sequence Classification pipeline using TensorFlow/Keras
 and Hugging Face's DistilBERT transformer.
 
-It includes:
-1. `DistilBertClassifier` class wrapper for sequence classification tasks.
-2. Fine-tuning method compiled with Adam optimizer and Sparse Categorical Crossentropy.
-3. Inference method returning categorical predictions and confidence scores.
-4. Self-testing execution block simulating Phase 3 workflow.
-
-Highly modular and heavily commented for educational walkthrough.
+It is updated to:
+1. Ingest the real 10,000-document multi-language Amazon dataset.
+2. Shuffles, cleans, and splits the data into 80/20 train/test sets, further segmenting
+   a stratified validation split.
+3. Tokenizes datasets and trains a multi-class sequence classifier for exactly 5 epochs.
+4. Uses Keras ModelCheckpoint callback to save the absolute best weights to
+   'models/checkpoints/text_classifier_best.h5' and config.json to 'models/checkpoints/config.json'.
+5. Exports training history to 'models/checkpoints/training_history.csv' at the end.
+6. Evaluates the best checkpoint model on the 20% test split, printing total accuracy,
+   macro F1-score, and separate language-specific (English vs. Spanish) test accuracies.
 """
 
 import logging
 import os
+import sys
 from typing import Dict, List, Union
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 
 # pyrefly: ignore [missing-import]
 from transformers import TFDistilBertForSequenceClassification
 
+# Configure python path to allow importing utils & models packages
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from utils.data_loader import load_production_dataset
 from utils.text_preprocessing import TextPreprocessor
 from utils.transfer_learning import LabelEncoder, tokenize_texts
 
+# Setup structured logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -54,7 +65,7 @@ class DistilBertClassifier:
         )
         logger.info("Model loaded successfully.")
 
-    def compile_model(self, learning_rate: float = 2e-5):
+    def compile_model(self, learning_rate: float = 3e-5):
         """
         Compiles the model with the Adam optimizer and Sparse Categorical Crossentropy loss.
         
@@ -62,7 +73,11 @@ class DistilBertClassifier:
             learning_rate (float): Small learning rate typical for fine-tuning transformer weights.
         """
         logger.info(f"Compiling Keras model with Adam optimizer (learning_rate={learning_rate})...")
-        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        if hasattr(tf.keras.optimizers, "legacy"):
+            logger.info("Using legacy Adam optimizer for Apple Silicon acceleration.")
+            optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate)
+        else:
+            optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
         
         # We use from_logits=True because TFDistilBertForSequenceClassification outputs raw logits
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
@@ -75,47 +90,77 @@ class DistilBertClassifier:
         self,
         train_inputs: Dict[str, np.ndarray],
         train_labels: np.ndarray,
-        epochs: int = 2,
-        batch_size: int = 2,
-        save_dir: str = "models"
-    ):
+        val_inputs: Dict[str, np.ndarray],
+        val_labels: np.ndarray,
+        epochs: int = 5,
+        batch_size: int = 16,
+        checkpoint_dir: str = "models/checkpoints"
+    ) -> tf.keras.callbacks.History:
         """
         Trains the classifier on tokenized inputs and labels, then saves model weights.
 
         Args:
-            train_inputs (Dict[str, np.ndarray]): Dict containing 'input_ids' and 'attention_mask'.
-            train_labels (np.ndarray): Target category indices (NumPy array).
+            train_inputs (Dict[str, np.ndarray]): Training features containing input_ids and attention_mask.
+            train_labels (np.ndarray): Training target label indices.
+            val_inputs (Dict[str, np.ndarray]): Validation features.
+            val_labels (np.ndarray): Validation target label indices.
             epochs (int): Number of training iterations.
             batch_size (int): Batch size used for gradient steps.
-            save_dir (str): Relative directory path to save model weights.
+            checkpoint_dir (str): Directory path to save model weights and config files.
+
+        Returns:
+            tf.keras.callbacks.History: Training history metrics log.
         """
-        logger.info(f"Starting fine-tuning for {epochs} epochs (batch_size={batch_size})...")
+        logger.info(f"Starting production fine-tuning for {epochs} epochs (batch_size={batch_size})...")
         
-        # Prepare inputs as a dictionary of TF Tensors or Keras-friendly NumPy arrays
-        inputs = {
+        # Ensure directories exist
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        checkpoint_path = os.path.join(checkpoint_dir, "text_classifier_best.h5")
+
+        # Save Hugging Face configuration file config.json
+        logger.info(f"Saving model configuration to '{checkpoint_dir}/config.json'...")
+        self.model.config.save_pretrained(checkpoint_dir)
+
+        # Initialize Keras ModelCheckpoint callback to save the absolute best weights based on validation loss
+        checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+            filepath=checkpoint_path,
+            save_best_only=True,
+            save_weights_only=True,
+            monitor="val_loss",
+            mode="min",
+            verbose=1
+        )
+
+        # Format inputs as dict structures
+        trn_inputs = {
             "input_ids": train_inputs["input_ids"],
             "attention_mask": train_inputs["attention_mask"]
         }
+        vld_inputs = {
+            "input_ids": val_inputs["input_ids"],
+            "attention_mask": val_inputs["attention_mask"]
+        }
 
-        # Execute training loop via standard Keras model.fit()
-        self.model.fit(
-            inputs,
+        # Run Keras fit model pipeline
+        history = self.model.fit(
+            trn_inputs,
             train_labels,
+            validation_data=(vld_inputs, val_labels),
             epochs=epochs,
             batch_size=batch_size,
+            callbacks=[checkpoint_callback],
             verbose=1
         )
         logger.info("Training complete.")
 
-        # Ensure directory exists
-        os.makedirs(save_dir, exist_ok=True)
-        weights_path = os.path.join(save_dir, "distilbert_weights.h5")
-        
-        logger.info(f"Saving model weights to '{weights_path}'...")
-        # Note: save_weights saves only the weight layers, which is highly space-efficient.
-        # Alternatively, self.model.save_pretrained(save_dir) can be used to save Hugging Face format.
-        self.model.save_weights(weights_path)
-        logger.info("Weights saved successfully.")
+        # Export training history to CSV
+        history_path = os.path.join(checkpoint_dir, "training_history.csv")
+        logger.info(f"Exporting training history to '{history_path}'...")
+        history_df = pd.DataFrame(history.history)
+        history_df.to_csv(history_path, index=False)
+        logger.info("Training history exported successfully.")
+
+        return history
 
     def load_weights(self, weights_path: str):
         """
@@ -147,27 +192,20 @@ class DistilBertClassifier:
         Returns:
             Dict[str, Union[str, float]]: Prediction outputs with category and confidence fields.
         """
-        # Step 1: Clean raw input text
         cleaned_text = preprocessor.clean_raw_text(text)
         if not cleaned_text:
             return {"category": "Unknown", "confidence": 0.0}
 
-        # Step 2: Tokenize clean text
         tokenized = tokenize_texts([cleaned_text], model_name=self.model_name, max_length=max_length)
         inputs = {
             "input_ids": tokenized["input_ids"],
             "attention_mask": tokenized["attention_mask"]
         }
 
-        # Step 3: Run inference
-        # We wrap in tf.device or run directly. TensorFlow handles inference on CPU/GPU automatically.
         outputs = self.model(inputs, training=False)
         logits = outputs.logits
-
-        # Step 4: Convert outputs to probabilities using Softmax activation
         probs = tf.nn.softmax(logits, axis=-1).numpy()[0]
 
-        # Step 5: Extract argmax index and decode class label name
         pred_idx = int(np.argmax(probs))
         confidence = float(probs[pred_idx])
         predicted_category = label_encoder.inverse_transform([pred_idx])[0]
@@ -178,56 +216,142 @@ class DistilBertClassifier:
         }
 
 
-# Self-test block using mock dataset to verify execution without crashes
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+def run_production_training(sample_size: int = 10000, epochs: int = 5, batch_size: int = 16):
+    """
+    Ingests production records, cleans, tokenizes, runs fine-tuning,
+    and performs detailed multi-language test evaluations.
     
-    from utils.data_loader import load_mock_data
-
+    Args:
+        sample_size (int): Total number of records to ingest.
+        epochs (int): Number of training epochs.
+        batch_size (int): Batch size used for training gradient steps.
+    """
     print("\n" + "=" * 80)
-    print("PHASE 3 SELF-TEST & VERIFICATION RUN")
+    print(f"PHASE 3 PRODUCTION TRAINING & MULTI-LANGUAGE EVALUATION (Size: {sample_size}, Epochs: {epochs})")
     print("=" * 80)
 
-    # 1. Load mock data
-    print("\n[Step 1] Loading dataset...")
-    df = load_mock_data()
-    
-    # 2. Preprocess texts
-    print("\n[Step 2] Cleaning texts using TextPreprocessor...")
-    preprocessor = TextPreprocessor()
-    df["cleaned_text"] = df["text"].apply(preprocessor.clean_raw_text)
-    print(df[["cleaned_text", "true_category"]])
+    # 1. Load production dataset (balanced records)
+    logger.info(f"Loading {sample_size} production records...")
+    df = load_production_dataset(sample_size=sample_size)
 
-    # 3. Label encode target category
-    print("\n[Step 3] Fitting LabelEncoder...")
+    # 2. Clean reviews using existing TextPreprocessor
+    logger.info("Preprocessing raw review strings...")
+    preprocessor = TextPreprocessor(default_lang="en")
+    df["cleaned_text"] = df["text"].apply(preprocessor.clean_raw_text)
+
+    # 3. Label encode target category ratings (1-5 stars mapped to indices 0-4)
+    logger.info("Encoding labels...")
     encoder = LabelEncoder()
-    labels = df["true_category"].tolist()
-    encoded_labels = encoder.fit_transform(labels)
+    # Cast ratings to string lists for the encoder fit step
+    encoded_labels = encoder.fit_transform(df["category"].tolist())
     num_classes = len(encoder.classes_)
 
-    # 4. Tokenize texts
-    print("\n[Step 4] Tokenizing clean texts...")
-    tokenized_data = tokenize_texts(df["cleaned_text"].tolist(), max_length=64)
-
-    # 5. Initialize and compile DistilBertClassifier
-    print("\n[Step 5] Initializing DistilBertClassifier...")
-    classifier = DistilBertClassifier(num_classes=num_classes)
-    classifier.compile_model(learning_rate=3e-5)
-
-    # 6. Run training for 1-2 epochs (small test run)
-    print("\n[Step 6] Running verification training loop (2 epochs, batch_size=2)...")
-    classifier.train(
-        train_inputs=tokenized_data,
-        train_labels=encoded_labels,
-        epochs=2,
-        batch_size=2
+    # 4. Train-Test Split (80/20 train/test distribution)
+    # We split the indices so we can index both clean texts, categories, and language tags
+    from sklearn.model_selection import train_test_split
+    indices = np.arange(len(df))
+    train_indices, test_indices = train_test_split(
+        indices,
+        test_size=0.2,
+        random_state=42,
+        stratify=df["category"]
     )
 
-    # 7. Test single inference prediction
-    print("\n[Step 7] Testing inference predict() method...")
-    test_text = "<html><body><p>Highly advanced AI and software engineering concepts are discussed here!</p></body></html>"
-    pred_result = classifier.predict(test_text, preprocessor, encoder)
-    print(f"Input Text:  {test_text}")
-    print(f"Prediction:  {pred_result}")
-    print("\nVerification pipeline completed successfully!")
-    print("=" * 80)
+    # Further split training data to get 10% validation data
+    train_indices_final, val_indices = train_test_split(
+        train_indices,
+        test_size=0.1,
+        random_state=42,
+        stratify=df.iloc[train_indices]["category"]
+    )
+
+    # Extract stratified splits
+    df_train = df.iloc[train_indices_final]
+    df_val = df.iloc[val_indices]
+    df_test = df.iloc[test_indices]
+
+    y_train = encoded_labels[train_indices_final]
+    y_val = encoded_labels[val_indices]
+    y_test = encoded_labels[test_indices]
+
+    # 5. Tokenize text splits using DistilBertTokenizer
+    logger.info("Tokenizing training, validation, and test splits...")
+    model_name = "distilbert-base-multilingual-cased"
+    max_length = 128
+    
+    train_inputs = tokenize_texts(df_train["cleaned_text"].tolist(), model_name=model_name, max_length=max_length)
+    val_inputs = tokenize_texts(df_val["cleaned_text"].tolist(), model_name=model_name, max_length=max_length)
+    test_inputs = tokenize_texts(df_test["cleaned_text"].tolist(), model_name=model_name, max_length=max_length)
+
+    # 6. Initialize, compile, and train the model for target epochs
+    classifier = DistilBertClassifier(num_classes=num_classes, model_name=model_name)
+    classifier.compile_model(learning_rate=3e-5)
+
+    # Train model
+    classifier.train(
+        train_inputs=train_inputs,
+        train_labels=y_train,
+        val_inputs=val_inputs,
+        val_labels=y_val,
+        epochs=epochs,
+        batch_size=batch_size,
+        checkpoint_dir="models/checkpoints"
+    )
+
+    # 7. Ingestion & Load best checkpoint weights back
+    logger.info("Loading absolute best weight checkpoint...")
+    best_weights_path = "models/checkpoints/text_classifier_best.h5"
+    classifier.load_weights(best_weights_path)
+
+    # 8. Run test evaluation
+    logger.info("Running evaluation on the 20% test split...")
+    tst_inputs = {
+        "input_ids": test_inputs["input_ids"],
+        "attention_mask": test_inputs["attention_mask"]
+    }
+    
+    # Run batch prediction to avoid OOM
+    predictions = classifier.model.predict(tst_inputs, batch_size=32, verbose=1)
+    logits = predictions.logits
+    probs = tf.nn.softmax(logits, axis=-1).numpy()
+    y_pred = np.argmax(probs, axis=-1)
+
+    # Calculate metrics
+    from sklearn.metrics import accuracy_score, f1_score
+    total_acc = accuracy_score(y_test, y_pred)
+    macro_f1 = f1_score(y_test, y_pred, average="macro")
+
+    # Segment test data by language
+    test_languages = df_test["language"].values
+    
+    en_mask = (test_languages == "en")
+    es_mask = (test_languages == "es")
+
+    en_acc = accuracy_score(y_test[en_mask], y_pred[en_mask]) if np.any(en_mask) else 0.0
+    es_acc = accuracy_score(y_test[es_mask], y_pred[es_mask]) if np.any(es_mask) else 0.0
+
+    # Print final evaluation metrics report
+    print("\n" + "=" * 60)
+    print("PRODUCTION MODEL EVALUATION REPORT")
+    print("=" * 60)
+    print(f"Total Test Accuracy         : {total_acc * 100:.2f}%")
+    print(f"Total Macro F1-Score        : {macro_f1:.4f}")
+    print("-" * 60)
+    print(f"English Test Accuracy ('en'): {en_acc * 100:.2f}%")
+    print(f"Spanish Test Accuracy ('es'): {es_acc * 100:.2f}%")
+    print("=" * 60 + "\n")
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="DistilBERT Production Training Pipeline")
+    parser.add_argument("--sample_size", type=int, default=10000, help="Total production samples to load")
+    parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
+    parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
+    args = parser.parse_args()
+    
+    run_production_training(
+        sample_size=args.sample_size,
+        epochs=args.epochs,
+        batch_size=args.batch_size
+    )

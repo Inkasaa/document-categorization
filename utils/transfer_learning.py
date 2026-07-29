@@ -70,29 +70,30 @@ class LabelEncoder:
         self.class_to_idx: Dict[str, int] = {}
         self.idx_to_class: Dict[int, str] = {}
 
-    def fit(self, labels: List[str]) -> "LabelEncoder":
+    def fit(self, labels: List[Union[str, int]]) -> "LabelEncoder":
         """
         Learns the unique set of categories in the provided labels.
 
         Args:
-            labels (List[str]): List of categorical target labels.
+            labels (List[Union[str, int]]): List of categorical or numeric target labels.
 
         Returns:
             LabelEncoder: The fitted encoder instance.
         """
-        # Find unique labels and sort them to ensure consistent ordering
-        self.classes_ = sorted(list(set(labels)))
+        # Convert all labels to string to ensure consistent sorting and mapping
+        string_labels = [str(lbl) for lbl in labels]
+        self.classes_ = sorted(list(set(string_labels)))
         self.class_to_idx = {name: idx for idx, name in enumerate(self.classes_)}
         self.idx_to_class = {idx: name for idx, name in enumerate(self.classes_)}
         logger.info(f"Fitted LabelEncoder with classes: {self.class_to_idx}")
         return self
 
-    def transform(self, labels: List[str]) -> np.ndarray:
+    def transform(self, labels: List[Union[str, int]]) -> np.ndarray:
         """
-        Converts textual category names to integer label IDs.
+        Converts category labels (strings or ints) to integer label IDs.
 
         Args:
-            labels (List[str]): Categorical label strings.
+            labels (List[Union[str, int]]): Target label values.
 
         Returns:
             np.ndarray: Integer array of encoded label values.
@@ -102,12 +103,13 @@ class LabelEncoder:
 
         encoded = []
         for label in labels:
-            if label not in self.class_to_idx:
+            label_str = str(label)
+            if label_str not in self.class_to_idx:
                 # Handle unseen labels by mapping them to an out-of-bounds warning
-                logger.warning(f"Unseen label '{label}' encountered. Defaulting to 0.")
+                logger.warning(f"Unseen label '{label_str}' encountered. Defaulting to 0.")
                 encoded.append(0)
             else:
-                encoded.append(self.class_to_idx[label])
+                encoded.append(self.class_to_idx[label_str])
 
         return np.array(encoded, dtype=np.int32)
 
