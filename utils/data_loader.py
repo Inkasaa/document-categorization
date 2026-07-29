@@ -76,8 +76,64 @@ def load_mock_data() -> pd.DataFrame:
     return df
 
 
+def load_production_dataset(sample_size: int = 10000) -> pd.DataFrame:
+    """
+    Loads the real multilingual dataset from 'buruzaemon/amazon_reviews_multi'.
+    Pulls a balanced mix of English ('en') and Spanish ('es') rows to total at least sample_size.
+    Maps columns:
+      - 'review_body' -> 'text'
+      - 'stars' -> 'category'
+      - keeps 'language'
+      
+    Args:
+        sample_size (int): The target total number of records to load.
+        
+    Returns:
+        pd.DataFrame: A clean DataFrame containing 'text', 'category', and 'language'.
+    """
+    from datasets import load_dataset
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info("Loading production dataset from Hugging Face datasets...")
+    
+    # Calculate half size for English and Spanish splits to balance them
+    half_size = sample_size // 2
+
+    # Load English split
+    logger.info(f"Loading English reviews (target count: {half_size})...")
+    en_dataset = load_dataset("buruzaemon/amazon_reviews_multi", "en", split="train", trust_remote_code=True)
+    en_shuffled = en_dataset.shuffle(seed=42)
+    en_subset = en_shuffled.select(range(min(half_size, len(en_shuffled))))
+    en_df = pd.DataFrame(en_subset)
+
+    # Load Spanish split
+    logger.info(f"Loading Spanish reviews (target count: {half_size})...")
+    es_dataset = load_dataset("buruzaemon/amazon_reviews_multi", "es", split="train", trust_remote_code=True)
+    es_shuffled = es_dataset.shuffle(seed=42)
+    es_subset = es_shuffled.select(range(min(half_size, len(es_shuffled))))
+    es_df = pd.DataFrame(es_subset)
+
+    # Combine splits
+    combined_df = pd.concat([en_df, es_df], ignore_index=True)
+
+    # Filter and rename columns to match our project schema
+    combined_df = combined_df[["review_body", "stars", "language"]].rename(
+        columns={"review_body": "text", "stars": "category"}
+    )
+    
+    logger.info(f"Successfully loaded and structured {len(combined_df)} production records.")
+    return combined_df
+
+
 if __name__ == "__main__":
-    # If run directly, display the loaded mock data
-    print("Loading and displaying the mock dataset:")
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    
+    print("\n--- Testing load_mock_data ---")
     mock_df = load_mock_data()
     print(mock_df)
+    
+    print("\n--- Testing load_production_dataset (sample_size=10) ---")
+    prod_df = load_production_dataset(sample_size=10)
+    print(prod_df)

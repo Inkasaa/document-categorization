@@ -18,10 +18,11 @@ document-categorization/
 ├── models/
 │   ├── __init__.py              # Models package constructor
 │   ├── tagger.py                # Context-aware tagger (NER + rule-based)
-│   └── text_classifier.py       # Fine-tunable DistilBERT classifier (Phase 3)
+│   ├── text_classifier.py       # Fine-tunable DistilBERT classifier (Phase 3)
+│   └── baseline_classifier.py   # Traditional TF-IDF + LogisticRegression baseline (Phase 1 Expansion)
 └── utils/
     ├── __init__.py              # Utils package constructor
-    ├── data_loader.py           # Mock dataset loader for multi-language examples
+    ├── data_loader.py           # Mock & real production dataset loaders (Phase 1 Expansion)
     ├── pipeline_engine.py       # Unified integration & batch processing engine (Phase 4)
     ├── text_preprocessing.py    # Multi-language text cleaning, language detection & tokenization
     └── transfer_learning.py     # DistilBERT tokenization & label encoding helpers
@@ -40,48 +41,36 @@ Lists dependencies required for processing, feature engineering, and modeling, i
 * `beautifulsoup4` for HTML stripping.
 * `transformers` (pinned to `<5.0.0` for TensorFlow modeling compatibility) & `tf-keras` (backward compatibility helper for Keras 3).
 * `streamlit` for the visualization dashboard UI.
+* `datasets` (pinned to `<4.0.0` to preserve Hugging Face loading script capabilities).
 
-### 2. Mock Data Loader (`utils/data_loader.py`)
-Generates a simulated dataset with documents across several languages (English, Spanish, French) containing raw noise such as HTML markup, excess whitespace, symbols, and mixed casing to test the text preprocessing pipeline.
+### 2. Dataset Loaders (`utils/data_loader.py`)
+Provides two core data loading routines:
+* `load_mock_data()`: Generates a simulated dataset with documents across several languages (English, Spanish, French) containing raw noise such as HTML markup, excess whitespace, symbols, and mixed casing.
+* `load_production_dataset(sample_size)`: Pulls real reviews from Hugging Face's `buruzaemon/amazon_reviews_multi` dataset, balances target categories by shuffling with a random seed, loads a 50/50 mix of English and Spanish reviews, and maps them to the project schema.
 
 ### 3. Text Preprocessing Utility (`utils/text_preprocessing.py`)
-Features a modular `TextPreprocessor` class that executes:
-* **HTML Cleaning**: Removes raw tags.
-* **Hashtag Removal**: Strips hashtags completely.
-* **Emoji/Symbol Filtering**: Strips out emojis (Unicode category `'So'`).
-* **Punctuation Normalization**: Standardizes consecutive punctuation (e.g., `!!!` -> `!`).
-* **Trailing Cleanup**: Strips punctuation and trailing space at the end of the text.
-* **Language Detection**: Automatically determines the language of the clean snippet. Falls back to a default language (e.g., English) if input has no alphabetic content.
-* **Dynamic SpaCy Loading**: Maps detected languages to standard small pipelines (`en_core_web_sm`, `es_core_news_sm`, `fr_core_news_sm`).
-* **Stopword & Noise Filtering**: Tokenizes and strips out language-specific stopwords, punctuation, numbers, and non-alphabetic elements.
-* **Lemmatization**: Normalizes words into their base forms (lemmas).
+Features a modular `TextPreprocessor` class that executes HTML cleaning, hashtag removal, emoji/symbol filtering, punctuation normalization, language detection, and dynamic SpaCy loading.
 
-### 4. Metadata Tagger Component (`models/tagger.py`)
-Implements a hybrid context-aware tagger (`DocumentTagger` class) combining:
-* **ML-based NER**: Runs Named Entity Recognition using SpaCy pipelines to extract core entities (Organizations, Persons, Locations, and Dates).
-* **Rule-based fallback keyword matching**: Appends domain-specific tags if specific keywords are detected within the document using regex word boundaries.
-* **Deduplication**: Resolves and returns unique, sorted tags.
+### 4. Baseline ML Classifier (`models/baseline_classifier.py`)
+Provides a traditional ML baseline pipeline:
+* Loads 10,000 balanced, multi-lingual review documents from the Hugging Face Amazon dataset.
+* Cleans review text using the preprocessor.
+* Splits the clean data into an 80/20 train/test split.
+* Generates features using scikit-learn's `TfidfVectorizer` (unigrams and bigrams, up to 10,000 features).
+* Trains a multi-class `LogisticRegression` model.
+* Prints testing evaluation metrics (Accuracy, Macro F1-score, and full classification report).
 
-### 5. Transfer Learning & Classification (`utils/transfer_learning.py` & `models/text_classifier.py`)
-Provides the Phase 3 deep learning text classification model:
-* **Hugging Face Tokenizer**: Converts clean texts into input IDs and attention masks using a multilingual pretrained DistilBERT tokenizer (`distilbert-base-multilingual-cased`).
-* **Label Encoder**: Maps text categories into numeric label values and back.
-* **TensorFlow Classifier**: Builds and compiles `TFDistilBertForSequenceClassification` with an Adam optimizer (e.g. learning rate `3e-5`) and Sparse Categorical Crossentropy loss.
-* **Custom Fine-Tuning**: Trains the model and serializes weights on disk (`models/distilbert_weights.h5`).
-* **Inference Pipeline**: Runs predicting function yielding class prediction and confidence scores.
+### 5. Metadata Tagger Component (`models/tagger.py`)
+Implements a hybrid context-aware tagger (`DocumentTagger` class) combining ML-based NER and rule-based keyword matching.
 
-### 6. Pipeline Integration Engine (`utils/pipeline_engine.py`)
-Provides the Phase 4 unified integration and batch-processing optimization engine:
-* **Unified Pipeline Orchestration**: Sequentially runs preprocessing, classification, and metadata tagging on raw documents.
-* **Batch Optimization**: Features `process_batch(list_of_texts)` which processes multiple documents in a single optimized matrix execution pass on DistilBERT.
-* **Robust Weight-Loading Fallback**: Gracefully detects missing weights file and logs warning, falling back to un-fine-tuned multilingual base model parameters instead of crashing.
-* **Caching**: Stores loaded model architectures and preprocessors in-memory.
+### 6. Transfer Learning & Classification (`utils/transfer_learning.py` & `models/text_classifier.py`)
+Provides the Phase 3 deep learning sequence classification model fine-tuning `TFDistilBertForSequenceClassification`.
 
-### 7. Interactive Visualization Dashboard (`app/real_time_dashboard.py`)
-Provides the Phase 5 interactive dashboard:
-* **Sleek Layout**: Users can paste document texts, click "Process Document", and view category predictions, language codes, execution latency, and generated tags (rendered as visual badges).
-* **Baseline Analytics**: Computes and updates metrics over the mock dataset on startup, rendering average latency and average model confidence KPI cards, alongside Category and Language distributions.
-* **Optimization Caching**: Uses `@st.cache_resource` to ensure models are loaded once to avoid reload overheads.
+### 7. Pipeline Integration Engine (`utils/pipeline_engine.py`)
+Provides the Phase 4 unified integration and batch-processing optimization engine.
+
+### 8. Interactive Visualization Dashboard (`app/real_time_dashboard.py`)
+Provides the Phase 5 interactive Streamlit dashboard.
 
 ---
 
@@ -125,18 +114,23 @@ Provides the Phase 5 interactive dashboard:
 python run_pipeline.py
 ```
 
-### 2. Run DistilBERT Fine-Tuning and Classifier Inference (Phase 3)
+### 2. Run TF-IDF + Logistic Regression Baseline Model (Phase 1 Expansion)
+```bash
+PYTHONPATH=. python models/baseline_classifier.py
+```
+
+### 3. Run DistilBERT Fine-Tuning and Classifier Inference (Phase 3)
 ```bash
 PYTHONPATH=. python models/text_classifier.py
 ```
 
-### 3. Run Unified Parallel Batch Processing Pipeline (Phase 4)
+### 4. Run Unified Parallel Batch Processing Pipeline (Phase 4)
 ```bash
 PYTHONPATH=. python utils/pipeline_engine.py
 ```
 
-### 4. Run Streamlit Interactive Web Dashboard (Phase 5)
+### 5. Run Streamlit Interactive Web Dashboard (Phase 5)
 ```bash
 streamlit run app/real_time_dashboard.py --server.port 8505
 ```
-Open your browser and navigate to `http://localhost:8505` to view the dashboard interface and interact with the pipeline.
+Open your browser and navigate to `http://localhost:8505` to view the dashboard interface.
