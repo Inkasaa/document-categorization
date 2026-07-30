@@ -27,7 +27,7 @@ def load_mock_data() -> pd.DataFrame:
         {
             "text": "Le match de football hier soir était incroyable! L'équipe locale a gagné 3-2 à la dernière minute. ⚽🏆",
             "category": "Sports",
-            "language": "es"  # Map to supported Spanish
+            "language": "es"  
         },
         {
             "text": "Computational complexity theory is a subfield of theoretical computer science... and it is fascinating! Check out NP-complete problems.",
@@ -55,90 +55,197 @@ def load_mock_data() -> pd.DataFrame:
 
 def load_production_dataset(sample_size: int = 10000) -> pd.DataFrame:
     """
-    Generates a balanced, high-quality multilingual production dataset containing
-    10,000+ realistic documents across the 5 target categories:
-    Finance, General, Noise, Sports, and Technology in English ('en') and Spanish ('es').
+    Generates a balanced, highly diverse, and realistic multilingual production dataset
+    across the 5 target categories.
     
-    This ensures that the model is trained on the actual target domains rather than star ratings.
+    Uses a broad pool of randomized template patterns, fillers, and distractor vocabulary
+    to prevent model memorization (overfitting) and simulate real-world data complexity.
     """
     np.random.seed(42)
+    target_per_bucket = sample_size // 10  # 5 categories * 2 languages
     
-    # 5 classes * 2 languages = 10 buckets
-    target_per_bucket = sample_size // 10
+    # ------------------ VOCABULARY ARRAYS ------------------
+    unis = ["MIT", "Stanford", "Oxford", "Berkeley", "Harvard", "Cambridge", "Caltech", "Imperial College", "ETH Zurich"]
+    techs = ["Docker containers", "Kubernetes clusters", "PyTorch models", "GraphQL APIs", "Kafka message queues", "Rust compilers", "C++ utilities", "TensorFlow layers", "Serverless functions", "NoSQL databases"]
+    techs_es = ["contenedores Docker", "clusters Kubernetes", "modelos PyTorch", "APIs GraphQL", "colas Kafka", "compiladores Rust", "bases de datos NoSQL"]
+    improvements = ["30% reduction", "2x improvement", "significant speedup", "substantial optimization", "50% decrease", "better throughput"]
+    improvements_es = ["reducción del 30%", "mejora de 2x", "aceleración significativa", "optimización sustancial", "disminución del 50%"]
+    concepts = ["asynchronous processing", "multi-thread computation", "vector operations", "lazy loading evaluation", "distributed consensus"]
+    concepts_es = ["procesamiento asíncrono", "cómputo multihilo", "operaciones vectoriales", "evaluación perezosa", "consenso distribuido"]
     
-    # Vocabularies
-    orgs_en = ["Federal Reserve", "Bank of America", "Goldman Sachs", "JPMorgan", "Morgan Stanley", "World Bank", "IMF", "Barclays", "HSBC", "Deutsche Bank"]
-    orgs_es = ["Banco Central", "Banco Santander", "BBVA", "Fondo Monetario Internacional", "Banco Mundial", "Banca March", "CaixaBank", "Banco de España"]
+    teams = ["the local club", "the national champions", "the rival squad", "the top-seeded players", "the underdog team"]
+    teams_es = ["el club local", "los campeones nacionales", "el equipo rival", "los jugadores favoritos", "el equipo revelación"]
+    sports = ["soccer", "basketball", "tennis", "baseball", "football", "rugby", "cricket", "golf", "athletics", "swimming"]
+    sports_es = ["fútbol", "baloncesto", "tenis", "béisbol", "fútbol americano", "rugby", "ciclismo", "atletismo", "natación"]
+    players = ["striker", "goalkeeper", "coach", "captain", "midfielder", "defender", "referee"]
+    players_es = ["delantero", "portero", "entrenador", "capitán", "centrocampista", "defensa", "árbitro"]
+    scores = ["3-2", "1-0", "0-0", "4-1", "95-92", "2-1"]
     
-    metrics_en = ["interest rates", "inflation rates", "market yield", "quarterly revenue", "fiscal deficit", "unemployment rate"]
+    commodities = ["crude oil", "gold bullion", "natural gas", "agricultural grains", "treasury bonds", "commercial real estate"]
+    commodities_es = ["petróleo crudo", "lingotes de oro", "gas natural", "bonos del tesoro", "bienes raíces comerciales"]
+    banks = ["Federal Reserve", "Bank of America", "Goldman Sachs", "JPMorgan", "Morgan Stanley", "World Bank", "IMF", "Barclays", "HSBC", "Deutsche Bank"]
+    banks_es = ["Banco Central", "Banco Santander", "BBVA", "Fondo Monetario Internacional", "Banco Mundial", "CaixaBank", "Banco de España"]
+    metrics = ["interest rates", "inflation rates", "market yield", "quarterly revenue", "fiscal deficit", "unemployment rate"]
     metrics_es = ["tasas de interés", "tasas de inflación", "rendimiento del mercado", "ingresos trimestrales", "déficit fiscal"]
+    events = ["annual trade summit", "corporate acquisition", "regulatory overhaul", "monetary policy meeting"]
+    events_es = ["cumbre comercial anual", "adquisición corporativa", "reforma regulatoria", "reunión de política monetaria"]
     
-    techs_en = ["artificial intelligence", "quantum computing", "machine learning", "cloud databases", "neural processors", "blockchain ledger tech"]
-    techs_es = ["inteligencia artificial", "computación cuántica", "aprendizaje automático", "bases de datos en la nube", "procesadores neuronales"]
-    
-    sports_en = ["soccer", "basketball", "tennis", "baseball", "football", "rugby", "cricket", "golf"]
-    sports_es = ["fútbol", "baloncesto", "tenis", "béisbol", "fútbol americano", "rugby", "ciclismo", "atletismo"]
-    
-    cities_en = ["New York", "London", "Tokyo", "Chicago", "Boston", "Frankfurt", "Toronto"]
-    cities_es = ["Madrid", "Barcelona", "Buenos Aires", "México", "Santiago", "Bogotá", "Sevilla"]
-    
-    players_en = ["the striker", "the team captain", "the MVP", "the star player", "the goalkeeper", "the coach"]
-    players_es = ["el delantero", "el capitán del equipo", "el jugador estrella", "el portero", "el entrenador"]
+    topics = ["renewable energy structures", "urban housing policies", "academic library archives", "global weather warnings", "public transportation fees"]
+    topics_es = ["estructuras de energía renovable", "políticas de vivienda urbana", "archivos de bibliotecas académicas", "tarifas de transporte público"]
+    cities = ["New York", "London", "Tokyo", "Chicago", "Boston", "Frankfurt", "Toronto", "Sydney", "Paris", "Berlin"]
+    cities_es = ["Madrid", "Barcelona", "Buenos Aires", "México", "Santiago", "Bogotá", "Sevilla", "Valencia", "Lima"]
 
-    topics_en = ["renewable energy projects", "local community housing", "educational library programs", "global weather systems", "public transit updates"]
-    topics_es = ["proyectos de energía renovable", "vivienda comunitaria local", "programas educativos de bibliotecas", "sistemas climáticos globales"]
+    # ------------------ TEMPLATE MAPS ------------------
+    templates_tech_en = [
+        "Researchers at {} published a paper detailing {}. The setup achieves a {} in network operations.",
+        "A major security vulnerability was patched in the latest {} release, ensuring better {} algorithms.",
+        "Silicon Valley startups are investing heavily in {} to optimize {} workloads.",
+        "Understanding {} is crucial for computer science graduates focusing on {}.",
+        "We compared {} performance against legacy designs and noticed a {} in throughput.",
+        "The integration of {} into serverless frameworks is growing rapidly across {} teams.",
+        "Developers updated their main codebase to leverage {}, solving issues with {}.",
+        "A tutorial was published on deploying {} in production environments using {} techniques."
+    ]
+    templates_tech_es = [
+        "Investigadores de {} publicaron un artículo sobre {}. El sistema logra una {} en operaciones.",
+        "Se corrigió una vulnerabilidad de seguridad importante en {}, garantizando mejores algoritmos de {}.",
+        "Las startups de tecnología están invirtiendo en {} para optimizar cargas de trabajo de {}.",
+        "Comprender {} es crucial para graduados en computación enfocados en {}.",
+        "Comparamos el rendimiento de {} contra diseños antiguos y notamos una {} en el flujo.",
+        "La integración de {} en frameworks en la nube está creciendo rápidamente en equipos de {}."
+    ]
+
+    templates_sports_en = [
+        "The championship game between {} and their rivals ended in a {} score last night.",
+        "After a grueling training session in {}, the {} declared that the team is ready for the tournament.",
+        "Tickets for the upcoming {} match are sold out, according to official reports in {}.",
+        "The {} suffered a minor setback due to a minor injury sustained by their key {}.",
+        "During the national {} tournament, several athletes established brand-new records.",
+        "Analysts expect a close contest between {} and their opponents in the next {} round.",
+        "The committee announced the new stadium guidelines for {} events in {} starting next week.",
+        "Local fans celebrated in the streets after the {} clinched the trophy in a {} thriller."
+    ]
+    templates_sports_es = [
+        "El partido de campeonato entre {} y sus rivales terminó con un resultado de {} anoche.",
+        "Después de un duro entrenamiento en {}, el {} declaró que el equipo está listo.",
+        "Las entradas para el próximo encuentro de {} están agotadas en la ciudad de {}.",
+        "El {} sufrió una baja debido a la lesión de su principal {}.",
+        "Durante el torneo nacional de {}, varios atletas establecieron nuevos récords.",
+        "Los analistas esperan un partido reñido entre {} y sus oponentes en la ronda de {}."
+    ]
+
+    templates_fin_en = [
+        "The price of {} fell dramatically following the release of the {} report today.",
+        "Representatives from {} met in {} to discuss stabilizing regional {} indexes.",
+        "Market analysts expect {} to increase borrowing costs due to rising {} levels.",
+        "A sudden {} sparked concerns about capital liquidity among regional {} offices.",
+        "Corporate executives announced that {} dividends will be distributed to shareholders in {}.",
+        "Economists warn that changes in {} could trigger a sell-off in {} assets.",
+        "The latest audit of {} revealed unexpected growth despite the {} restrictions.",
+        "Traders in {} remained cautious ahead of the upcoming {} guidelines announcement."
+    ]
+    templates_fin_es = [
+        "El precio de {} cayó drásticamente tras la publicación del informe sobre {}.",
+        "Representantes de {} se reunieron en {} para discutir la estabilización de los índices de {}.",
+        "Los analistas del mercado esperan que {} aumente los costos debido al aumento de las {}.",
+        "Una {} repentina despertó preocupación sobre la liquidez en las oficinas financieras de {}.",
+        "Ejecutivos corporativos anunciaron dividendos de {} para los accionistas en {}."
+    ]
+
+    templates_gen_en = [
+        "The city council of {} passed a new resolution regulating {} in municipal zones.",
+        "A local nonprofit organized a community workshop focused on {} last Saturday.",
+        "Meteorologists issued a forecast warning about unusual patterns in {} near {}.",
+        "The library system in {} expanded its public collection to include more resources on {}.",
+        "Volunteers gathered in the central square of {} to support awareness for {}.",
+        "A panel of local experts will host a public discussion regarding {} next Tuesday.",
+        "Residents expressed mixed reactions to the proposed alterations for {} plans in {}.",
+        "A historical exhibit showcasing local achievements in {} opened to visitors in {}."
+    ]
+    templates_gen_es = [
+        "El ayuntamiento de {} aprobó una nueva resolución que regula las {} en zonas municipales.",
+        "Una organización local organizó un taller comunitario centrado en {} el sábado pasado.",
+        "Los meteorólogos emitieron un pronóstico sobre patrones inusuales de {} cerca de {}.",
+        "El sistema de bibliotecas de {} amplió su colección para incluir más recursos sobre {}.",
+        "Los voluntarios se reunieron en la plaza central de {} para apoyar la difusión de {}."
+    ]
 
     noise_templates = [
-        "<html><body><p>{num}!!! $$$ %%% --- RAW NOISY DATA BLOCK.</p></body></html>",
-        "  !!! ??? @@@ ### $$$ %%% ^^^ &&& *() _+ - = {{ }} [ ] | \\ : ; \" ' < > , . / ~ ` {num}  ",
-        "{num} --- NOISY DIGITS AND SYMBOLS ONLY.",
-        "html tag line <br/> <p> {word} </p> {num}!!!",
+        "<html><body><p>CODE-{num}!!! $$$ %%% --- RAW NOISY DATA BLOCK.</p></body></html>",
+        "  !!! ??? @@@ ### $$$ %%% ^^^ &&& *() _+ - = {num} {{ }} [ ] | \\ : ; \" ' < > , . / ~ `  ",
+        "LOG-{num} --- NOISY DIGITS AND SYMBOLS ONLY FOR DEBUGGING.",
+        "html tag line <br/> <p> {word} </p> error-code-{num}!!!",
         "XYZ!!! {num} --- Very noisy data with mostly punctuation and numbers."
     ]
 
     records = []
 
     for _ in range(target_per_bucket):
-        # 1. Finance (EN)
-        text = f"The {np.random.choice(orgs_en)} announced a major adjustment in {np.random.choice(metrics_en)} in {np.random.choice(cities_en)} today, affecting local investment portfolios and stock market indexes."
-        records.append({"text": text, "category": "Finance", "language": "en"})
-        
-        # 2. Finance (ES)
-        text = f"El {np.random.choice(orgs_es)} anunció hoy un ajuste importante en las {np.random.choice(metrics_es)} en {np.random.choice(cities_es)}, lo que afectará las carteras de inversión y los índices de la bolsa."
-        records.append({"text": text, "category": "Finance", "language": "es"})
-        
-        # 3. Technology (EN)
-        text = f"A new breakthrough in {np.random.choice(techs_en)} promises to accelerate software development, cloud infrastructure, and network data encryption systems worldwide."
+        # 1. Technology (EN)
+        tpl = np.random.choice(templates_tech_en)
+        if "{}" in tpl:
+            # fill placeholders based on tpl format requirements
+            placeholders = [np.random.choice(unis), np.random.choice(techs), np.random.choice(improvements), np.random.choice(concepts)]
+            text = tpl.format(*placeholders[:tpl.count("{}")])
         records.append({"text": text, "category": "Technology", "language": "en"})
         
-        # 4. Technology (ES)
-        text = f"Un nuevo avance en {np.random.choice(techs_es)} promete acelerar el desarrollo de software, la infraestructura en la nube y los sistemas de cifrado de red a nivel mundial."
+        # 2. Technology (ES)
+        tpl = np.random.choice(templates_tech_es)
+        if "{}" in tpl:
+            placeholders = [np.random.choice(cities_es), np.random.choice(techs_es), np.random.choice(improvements_es), np.random.choice(concepts_es)]
+            text = tpl.format(*placeholders[:tpl.count("{}")])
         records.append({"text": text, "category": "Technology", "language": "es"})
         
-        # 5. Sports (EN)
-        text = f"The local {np.random.choice(sports_en)} tournament in {np.random.choice(cities_en)} ended with a dramatic victory as {np.random.choice(players_en)} scored in the final minutes of the match."
+        # 3. Sports (EN)
+        tpl = np.random.choice(templates_sports_en)
+        if "{}" in tpl:
+            placeholders = [np.random.choice(teams), np.random.choice(scores), np.random.choice(cities), np.random.choice(players), np.random.choice(sports)]
+            text = tpl.format(*placeholders[:tpl.count("{}")])
         records.append({"text": text, "category": "Sports", "language": "en"})
         
-        # 6. Sports (ES)
-        text = f"El torneo local de {np.random.choice(sports_es)} en {np.random.choice(cities_es)} terminó con una victoria dramática cuando {np.random.choice(players_es)} anotó en los últimos minutos del partido."
+        # 4. Sports (ES)
+        tpl = np.random.choice(templates_sports_es)
+        if "{}" in tpl:
+            placeholders = [np.random.choice(teams_es), np.random.choice(scores), np.random.choice(cities_es), np.random.choice(players_es), np.random.choice(sports_es)]
+            text = tpl.format(*placeholders[:tpl.count("{}")])
         records.append({"text": text, "category": "Sports", "language": "es"})
         
+        # 5. Finance (EN)
+        tpl = np.random.choice(templates_fin_en)
+        if "{}" in tpl:
+            placeholders = [np.random.choice(commodities), np.random.choice(events), np.random.choice(banks), np.random.choice(cities), np.random.choice(metrics)]
+            text = tpl.format(*placeholders[:tpl.count("{}")])
+        records.append({"text": text, "category": "Finance", "language": "en"})
+        
+        # 6. Finance (ES)
+        tpl = np.random.choice(templates_fin_es)
+        if "{}" in tpl:
+            placeholders = [np.random.choice(commodities_es), np.random.choice(events_es), np.random.choice(banks_es), np.random.choice(cities_es), np.random.choice(metrics_es)]
+            text = tpl.format(*placeholders[:tpl.count("{}")])
+        records.append({"text": text, "category": "Finance", "language": "es"})
+        
         # 7. General (EN)
-        text = f"Local government officials in {np.random.choice(cities_en)} met to discuss {np.random.choice(topics_en)} and community park maintenance budgets for next year."
+        tpl = np.random.choice(templates_gen_en)
+        if "{}" in tpl:
+            placeholders = [np.random.choice(cities), np.random.choice(topics), np.random.choice(cities), np.random.choice(topics)]
+            text = tpl.format(*placeholders[:tpl.count("{}")])
         records.append({"text": text, "category": "General", "language": "en"})
         
         # 8. General (ES)
-        text = f"Los funcionarios del gobierno local en {np.random.choice(cities_es)} se reunieron para discutir sobre {np.random.choice(topics_es)} y presupuestos de mantenimiento de parques comunitarios para el próximo año."
+        tpl = np.random.choice(templates_gen_es)
+        if "{}" in tpl:
+            placeholders = [np.random.choice(cities_es), np.random.choice(topics_es), np.random.choice(cities_es), np.random.choice(topics_es)]
+            text = tpl.format(*placeholders[:tpl.count("{}")])
         records.append({"text": text, "category": "General", "language": "es"})
         
         # 9. Noise (EN)
         template = np.random.choice(noise_templates)
-        text = template.format(num=np.random.randint(1000, 99999), word="garbage_test_en")
+        text = template.format(num=np.random.randint(1000, 999999), word="noise_word_en")
         records.append({"text": text, "category": "Noise", "language": "en"})
         
         # 10. Noise (ES)
         template = np.random.choice(noise_templates)
-        text = template.format(num=np.random.randint(1000, 99999), word="basura_prueba_es")
+        text = template.format(num=np.random.randint(1000, 999999), word="ruido_palabra_es")
         records.append({"text": text, "category": "Noise", "language": "es"})
 
     df = pd.DataFrame(records)
