@@ -144,7 +144,7 @@ class DistilBertClassifier:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
         for epoch in range(epochs):
-            print(f"\nEpoch {epoch+1}/{epochs}")
+            print(f"\nEpoch {epoch+1}/{epochs}", flush=True)
             logger.info(f"Epoch {epoch+1}/{epochs} starting...")
             
             # Epoch Metrics
@@ -169,7 +169,9 @@ class DistilBertClassifier:
                 epoch_acc.update_state(y_batch, logits)
 
                 if step % 5 == 0 or step == len(train_dataset) - 1:
-                    print(f"  Step {step}/{len(train_dataset)} - loss: {loss_value.numpy():.4f} - accuracy: {epoch_acc.result().numpy():.4f}")
+                    log_msg = f"  Step {step}/{len(train_dataset)} - loss: {loss_value.numpy():.4f} - accuracy: {epoch_acc.result().numpy():.4f}"
+                    print(log_msg, flush=True)
+                    logger.info(log_msg)
 
             # Validation metrics
             val_loss = tf.keras.metrics.Mean()
@@ -188,8 +190,8 @@ class DistilBertClassifier:
             val_l = float(val_loss.result().numpy())
             val_a = float(val_acc.result().numpy())
 
-            print(f"Epoch {epoch+1} Metrics:")
-            print(f"  loss: {train_l:.4f} - accuracy: {train_a:.4f} - val_loss: {val_l:.4f} - val_accuracy: {val_a:.4f}")
+            print(f"Epoch {epoch+1} Metrics:", flush=True)
+            print(f"  loss: {train_l:.4f} - accuracy: {train_a:.4f} - val_loss: {val_l:.4f} - val_accuracy: {val_a:.4f}", flush=True)
             logger.info(f"Epoch {epoch+1} - loss: {train_l:.4f} - accuracy: {train_a:.4f} - val_loss: {val_l:.4f} - val_accuracy: {val_a:.4f}")
 
             history_dict["loss"].append(train_l)
@@ -200,7 +202,7 @@ class DistilBertClassifier:
             # Save absolute best checkpoint weights
             if val_l < best_val_loss:
                 best_val_loss = val_l
-                print(f"  val_loss improved to {val_l:.4f}. Saving best weights checkpoint...")
+                print(f"  val_loss improved to {val_l:.4f}. Saving best weights checkpoint...", flush=True)
                 logger.info(f"Validation loss improved to {val_l:.4f}. Saving best weights checkpoint...")
                 self.model.save_weights(checkpoint_path)
 
