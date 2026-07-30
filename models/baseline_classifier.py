@@ -89,7 +89,7 @@ def train_and_evaluate_baseline():
     clf = LogisticRegression(
         max_iter=1000,
         random_state=42,
-        C=1.0
+        C=2.0
     )
     clf.fit(X_train_vec, y_train)
 
