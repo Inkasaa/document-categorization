@@ -120,22 +120,12 @@ class DistilBertClassifier:
         logger.info(f"Saving model configuration to '{checkpoint_dir}/config.json'...")
         self.model.config.save_pretrained(checkpoint_dir)
 
-        # Prepare tf.data.Dataset batches
-        train_dataset = tf.data.Dataset.from_tensor_slices((
-            {
-                "input_ids": train_inputs["input_ids"],
-                "attention_mask": train_inputs["attention_mask"]
-            },
-            train_labels
-        )).shuffle(1000).batch(batch_size)
+        # Prepare indices for training and validation datasets
+        train_samples = len(train_labels)
+        train_indices = np.arange(train_samples)
 
-        val_dataset = tf.data.Dataset.from_tensor_slices((
-            {
-                "input_ids": val_inputs["input_ids"],
-                "attention_mask": val_inputs["attention_mask"]
-            },
-            val_labels
-        )).batch(batch_size)
+        val_samples = len(val_labels)
+        val_indices = np.arange(val_samples)
 
         best_val_loss = float("inf")
         history_dict = {"loss": [], "accuracy": [], "val_loss": [], "val_accuracy": []}
@@ -151,8 +141,22 @@ class DistilBertClassifier:
             epoch_loss = tf.keras.metrics.Mean()
             epoch_acc = tf.keras.metrics.SparseCategoricalAccuracy()
 
+            # Shuffle training indices at start of each epoch
+            np.random.shuffle(train_indices)
+
             # Batch iteration
-            for step, (x_batch, y_batch) in enumerate(train_dataset):
+            num_train_batches = int(np.ceil(train_samples / batch_size))
+            for step in range(num_train_batches):
+                # Slice current batch indices
+                batch_idx = train_indices[step * batch_size : (step + 1) * batch_size]
+                
+                # Retrieve features and targets for batch
+                x_batch = {
+                    "input_ids": train_inputs["input_ids"][batch_idx],
+                    "attention_mask": train_inputs["attention_mask"][batch_idx]
+                }
+                y_batch = train_labels[batch_idx]
+
                 with tf.GradientTape() as tape:
                     outputs = self.model(x_batch, training=True)
                     logits = outputs.logits
@@ -168,8 +172,8 @@ class DistilBertClassifier:
                 epoch_loss.update_state(loss_value)
                 epoch_acc.update_state(y_batch, logits)
 
-                if step % 5 == 0 or step == len(train_dataset) - 1:
-                    log_msg = f"  Step {step}/{len(train_dataset)} - loss: {loss_value.numpy():.4f} - accuracy: {epoch_acc.result().numpy():.4f}"
+                if step % 5 == 0 or step == num_train_batches - 1:
+                    log_msg = f"  Step {step}/{num_train_batches} - loss: {loss_value.numpy():.4f} - accuracy: {epoch_acc.result().numpy():.4f}"
                     print(log_msg, flush=True)
                     logger.info(log_msg)
 
@@ -177,7 +181,15 @@ class DistilBertClassifier:
             val_loss = tf.keras.metrics.Mean()
             val_acc = tf.keras.metrics.SparseCategoricalAccuracy()
 
-            for x_batch, y_batch in val_dataset:
+            num_val_batches = int(np.ceil(val_samples / batch_size))
+            for step in range(num_val_batches):
+                batch_idx = val_indices[step * batch_size : (step + 1) * batch_size]
+                x_batch = {
+                    "input_ids": val_inputs["input_ids"][batch_idx],
+                    "attention_mask": val_inputs["attention_mask"][batch_idx]
+                }
+                y_batch = val_labels[batch_idx]
+
                 outputs = self.model(x_batch, training=False)
                 logits = outputs.logits
                 val_loss_val = loss_fn(y_batch, logits)
