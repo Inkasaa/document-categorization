@@ -211,6 +211,11 @@ class DistilBertClassifier:
             history_dict["val_loss"].append(val_l)
             history_dict["val_accuracy"].append(val_a)
 
+            # Save checkpoint after each epoch as required in the guidelines
+            epoch_checkpoint_path = os.path.join(checkpoint_dir, f"text_classifier_epoch_{epoch+1}.h5")
+            print(f"  Saving epoch {epoch+1} weights to '{epoch_checkpoint_path}'...", flush=True)
+            self.model.save_weights(epoch_checkpoint_path)
+
             # Save absolute best checkpoint weights
             if val_l < best_val_loss:
                 best_val_loss = val_l
