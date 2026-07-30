@@ -39,39 +39,34 @@ def train_and_evaluate_baseline():
     # Clean text strings using our advanced preprocessor filters
     df["cleaned_text"] = df["text"].apply(preprocessor.clean_raw_text)
 
-    # 3. Map target labels to Binary Sentiment (discarding neutral 3-star reviews to resolve class ambiguity)
-    df["rating"] = df["category"].astype(int)
-    logger.info("Discarding neutral 3-star reviews for maximum classification precision...")
-    df = df[df["rating"] != 3].copy()
-    
-    # Binary mapping: 1 = Positive (4-5 stars), 0 = Negative (1-2 stars)
-    df["binary_target"] = (df["rating"] >= 4).astype(int)
+    # 3. Target label is already 'category' containing the 5 thematic classes
+    # (Finance, General, Noise, Sports, Technology)
+    target_labels = df["category"]
 
     # 4. Print Sample Data for Examination
     print("\n" + "=" * 80)
     print("EXAMINING DATASET SAMPLES")
     print("=" * 80)
-    # Print the first 5 records with original vs. cleaned text, star ratings, and mapped sentiment
+    # Print the first 5 records with original vs. cleaned text and mapped categories
     for idx, row in df.head(5).iterrows():
         print(f"Sample #{idx+1}:")
         print(f"  [Language]  : {row['language'].upper()}")
-        print(f"  [Rating]    : {row['rating']} stars")
-        print(f"  [Sentiment] : {'POSITIVE (1)' if row['binary_target'] == 1 else 'NEGATIVE (0)'}")
+        print(f"  [Category]  : {row['category'].upper()}")
         print(f"  [Original]  : {row['text'][:140].strip()}...")
         print(f"  [Cleaned]   : {row['cleaned_text'][:140].strip()}...")
         print("-" * 80)
     print("=" * 80 + "\n")
 
-    # 5. Train-Test Split (80/20 stratified split based on target binary sentiment)
+    # 5. Train-Test Split (80/20 stratified split based on the 5 target classes)
     logger.info("Splitting dataset into 80/20 train/test sets...")
     indices = np.arange(len(df))
     X_train, X_test, y_train, y_test, indices_train, indices_test = train_test_split(
         df["cleaned_text"],
-        df["binary_target"],
+        target_labels,
         indices,
         test_size=0.2,
         random_state=42,
-        stratify=df["binary_target"]
+        stratify=target_labels
     )
 
     # 6. TF-IDF Feature Extraction
@@ -85,7 +80,7 @@ def train_and_evaluate_baseline():
     X_test_vec = vectorizer.transform(X_test)
 
     # 7. Logistic Regression Model Training
-    logger.info("Training binary LogisticRegression baseline model...")
+    logger.info("Training multi-class LogisticRegression baseline model...")
     clf = LogisticRegression(
         max_iter=1000,
         random_state=42,
@@ -129,7 +124,7 @@ def train_and_evaluate_baseline():
     print(f"Spanish Accuracy ('es')     : {es_acc * 100:.2f}% (Target: >= 80%)")
     print("-" * 60)
     print("Classification Report:")
-    print(classification_report(y_test, y_pred, target_names=["Negative (0)", "Positive (1)"]))
+    print(classification_report(y_test, y_pred))
     print("=" * 60 + "\n")
 
 
