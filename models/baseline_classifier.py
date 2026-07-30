@@ -39,10 +39,12 @@ def train_and_evaluate_baseline():
     # Clean text strings using our advanced preprocessor filters
     df["cleaned_text"] = df["text"].apply(preprocessor.clean_raw_text)
 
-    # 3. Map target labels to Binary Sentiment
-    # category is original star rating (1-5 as strings)
+    # 3. Map target labels to Binary Sentiment (discarding neutral 3-star reviews to resolve class ambiguity)
     df["rating"] = df["category"].astype(int)
-    # Binary mapping: 1 = Positive (4-5 stars), 0 = Negative (1-3 stars)
+    logger.info("Discarding neutral 3-star reviews for maximum classification precision...")
+    df = df[df["rating"] != 3].copy()
+    
+    # Binary mapping: 1 = Positive (4-5 stars), 0 = Negative (1-2 stars)
     df["binary_target"] = (df["rating"] >= 4).astype(int)
 
     # 4. Print Sample Data for Examination
