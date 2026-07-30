@@ -374,8 +374,8 @@ def run_production_training(sample_size: int = 10000, epochs: int = 5, batch_siz
         "attention_mask": test_inputs["attention_mask"]
     }
     
-    # Run batch prediction to avoid OOM
-    predictions = classifier.model.predict(tst_inputs, batch_size=32, verbose=1)
+    # Run prediction by passing inputs directly to model to avoid Keras .predict() deadlock
+    predictions = classifier.model(tst_inputs, training=False)
     logits = predictions.logits
     probs = tf.nn.softmax(logits, axis=-1).numpy()
     y_pred = np.argmax(probs, axis=-1)
