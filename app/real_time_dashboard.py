@@ -122,14 +122,22 @@ def get_baseline_analytics() -> dict:
     }
 
 
-# Load pipelines
+# Load pipeline engine
 try:
     engine = load_pipeline_engine()
-    analytics = get_baseline_analytics()
 except Exception as err:
     st.error(f"Failed to load pipelines: {err}")
     logger.exception("Init failure")
     st.stop()
+
+
+# Initialize session state variables
+if "processed_docs" not in st.session_state:
+    st.session_state.processed_docs = []
+if "latest_result" not in st.session_state:
+    st.session_state.latest_result = None
+if "latest_latency" not in st.session_state:
+    st.session_state.latest_latency = 0.0
 
 
 # ==========================================
@@ -137,39 +145,53 @@ except Exception as err:
 # ==========================================
 with st.sidebar:
     st.image("https://img.icons8.com/nolan/96/tags.png", width=70)
-    st.title("📊 System Analytics")
-    st.write("Real-time telemetry gathered from the multi-language baseline dataset.")
+    st.title("📊 Session Telemetry")
     
-    st.markdown("---")
-    
-    # Display system telemetry KPIs
-    st.subheader("💡 Telemetry KPIs")
-    st.metric(
-        label="⏱️ Avg Inference Latency",
-        value=f"{analytics['avg_latency']:.2f} ms"
-    )
-    st.metric(
-        label="🎯 Avg Classification Confidence",
-        value=f"{analytics['avg_confidence'] * 100:.1f}%"
-    )
-    
-    st.markdown("---")
-    
-    # Render baseline distribution charts
-    st.subheader("📈 Category Distribution")
-    # Convert counts to df for bar chart
-    cat_df = pd.DataFrame({
-        "Category": analytics["category_counts"].index,
-        "Count": analytics["category_counts"].values
-    })
-    st.bar_chart(cat_df.set_index("Category"))
-    
-    st.subheader("🌍 Language Breakdown")
-    lang_df = pd.DataFrame({
-        "Language": analytics["language_counts"].index,
-        "DocumentsCount": analytics["language_counts"].values
-    })
-    st.bar_chart(lang_df.set_index("Language"))
+    if not st.session_state.processed_docs:
+        st.write("No documents processed in this session yet.")
+        st.info("Paste text and click '🚀 Process Document' to collect real-time telemetry metrics.")
+    else:
+        st.write(f"Telemetry collected from {len(st.session_state.processed_docs)} document(s) processed in this session.")
+        st.markdown("---")
+        
+        # Calculate stats dynamically from current session's processed documents
+        latencies = [doc["latency"] for doc in st.session_state.processed_docs]
+        confidences = [doc["confidence"] for doc in st.session_state.processed_docs]
+        categories = [doc["category"] for doc in st.session_state.processed_docs]
+        languages = [doc["language"] for doc in st.session_state.processed_docs]
+        
+        avg_latency = np.mean(latencies)
+        avg_confidence = np.mean(confidences)
+        
+        st.subheader("💡 Telemetry KPIs")
+        st.metric(
+            label="⏱️ Avg Inference Latency",
+            value=f"{avg_latency:.2f} ms"
+        )
+        st.metric(
+            label="🎯 Avg Classification Confidence",
+            value=f"{avg_confidence * 100:.1f}%"
+        )
+        
+        st.markdown("---")
+        
+        # Category distribution chart
+        st.subheader("📈 Category Distribution")
+        cat_counts = pd.Series(categories).value_counts()
+        cat_df = pd.DataFrame({
+            "Category": cat_counts.index,
+            "Count": cat_counts.values
+        })
+        st.bar_chart(cat_df.set_index("Category"))
+        
+        # Language breakdown chart
+        st.subheader("🌍 Language Breakdown")
+        lang_counts = pd.Series(languages).value_counts()
+        lang_df = pd.DataFrame({
+            "Language": lang_counts.index,
+            "DocumentsCount": lang_counts.values
+        })
+        st.bar_chart(lang_df.set_index("Language"))
 
 
 # ==========================================
@@ -199,12 +221,33 @@ raw_input = st.text_area(
 process_btn = st.button("🚀 Process Document")
 
 if process_btn:
+    if not raw_input.strip():
+        st.warning("Please enter some document text to process.")
+    else:
+        # Measure execution latency for this specific text run
+        t_start = time.time()
+        result = engine.process_document(raw_input)
+        latency = (time.time() - t_start) * 1000.0
+        
+        # Append to session state processed documents list
+        st.session_state.processed_docs.append({
+            "latency": latency,
+            "confidence": result["confidence_score"],
+            "category": result["predicted_category"],
+            "language": result["detected_language"]
+        })
+        
+        # Save to latest result state to render in main area
+        st.session_state.latest_result = result
+        st.session_state.latest_latency = latency
+        st.rerun()
+
+
+# Render Extraction Results panel if a document has been processed
+if st.session_state.latest_result is not None:
     st.subheader("🔍 Extraction Results")
-    
-    # Measure execution latency for this specific text run
-    t_start = time.time()
-    result = engine.process_document(raw_input)
-    latency = (time.time() - t_start) * 1000.0
+    result = st.session_state.latest_result
+    latency = st.session_state.latest_latency
     
     # Grid Layout for metrics
     col1, col2, col3 = st.columns(3)
