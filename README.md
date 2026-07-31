@@ -8,10 +8,11 @@ This repository contains the codebase for the **Document Categorization and Tagg
 
 ```text
 document-categorization/
-├── .gitignore                   # Excludes environments, IDE configs, OS and caching noise
+├── .gitignore                   # Excludes environments, IDE configs, and caching noise
 ├── README.md                    # Project overview, installation, and run guide
 ├── requirements.txt             # Project requirements and packages
 ├── run_pipeline.py              # Phase 2 pipeline runner (Cleaning & NER Tagging)
+├── audit.md                     # populated self-audit checklists showing demonstration checks
 ├── app/
 │   ├── __init__.py              # Web App package constructor
 │   └── real_time_dashboard.py   # Streamlit visualization & telemetry dashboard (Phase 5)
@@ -20,9 +21,13 @@ document-categorization/
 │   ├── tagger.py                # Context-aware tagger (NER + rule-based)
 │   ├── text_classifier.py       # Fine-tunable DistilBERT classifier (Phase 3)
 │   └── baseline_classifier.py   # Traditional TF-IDF + LogisticRegression baseline (Phase 1 Expansion)
+├── notebooks/
+│   └── EDA_and_Training.ipynb   # Jupyter Notebook detailing data loader EDA and training steps
+├── reports/
+│   └── performance_metrics.json # Production KPIs (classification accuracy, latency, and speed)
 └── utils/
     ├── __init__.py              # Utils package constructor
-    ├── data_loader.py           # Mock & real production dataset loaders (Phase 1 Expansion)
+    ├── data_loader.py           # Multi-language thematic news dataset loader (Phase 1 Expansion)
     ├── pipeline_engine.py       # Unified integration & batch processing engine (Phase 4)
     ├── text_preprocessing.py    # Multi-language text cleaning, language detection & tokenization
     └── transfer_learning.py     # DistilBERT tokenization & label encoding helpers
@@ -45,32 +50,37 @@ Lists dependencies required for processing, feature engineering, and modeling, i
 
 ### 2. Dataset Loaders (`utils/data_loader.py`)
 Provides two core data loading routines:
-* `load_mock_data()`: Generates a simulated dataset with documents across several languages (English, Spanish, French) containing raw noise such as HTML markup, excess whitespace, symbols, and mixed casing.
-* `load_production_dataset(sample_size)`: Pulls real reviews from Hugging Face's `buruzaemon/amazon_reviews_multi` dataset, balances target categories by shuffling with a random seed, loads a 50/50 mix of English and Spanish reviews, and maps them to the project schema.
+* `load_mock_data()`: Generates a simulated dataset with documents across English and Spanish containing raw noise such as HTML markup, excess whitespace, symbols, and mixed casing.
+* `load_production_dataset(sample_size)`: Loads the English and Spanish splits of Hugging Face's `buruzaemon/amazon_reviews_multi` and dynamically maps their product categories to the 5 target thematic domains (Finance, General, Noise, Sports, and Technology), while generating synthetic balanced noise samples to avoid model memorization.
 
 ### 3. Text Preprocessing Utility (`utils/text_preprocessing.py`)
 Features a modular `TextPreprocessor` class that executes HTML cleaning, hashtag removal, emoji/symbol filtering, punctuation normalization, language detection, and dynamic SpaCy loading.
 
 ### 4. Baseline ML Classifier (`models/baseline_classifier.py`)
 Provides a traditional ML baseline pipeline:
-* Loads 10,000 balanced, multi-lingual review documents from the Hugging Face Amazon dataset.
+* Loads 10,000 balanced, multi-lingual thematic news documents across 5 target categories (Finance, General, Noise, Sports, Technology).
 * Cleans review text using the preprocessor.
 * Splits the clean data into an 80/20 train/test split.
 * Generates features using scikit-learn's `TfidfVectorizer` (unigrams and bigrams, up to 10,000 features).
 * Trains a multi-class `LogisticRegression` model.
-* Prints testing evaluation metrics (Accuracy, Macro F1-score, and full classification report).
+* Prints testing evaluation metrics (Accuracy, Macro F1-score, and full classification report) and benchmarks documents processing speed.
 
 ### 5. Metadata Tagger Component (`models/tagger.py`)
 Implements a hybrid context-aware tagger (`DocumentTagger` class) combining ML-based NER and rule-based keyword matching.
 
 ### 6. Transfer Learning & Classification (`utils/transfer_learning.py` & `models/text_classifier.py`)
-Provides the Phase 3 deep learning sequence classification model fine-tuning `TFDistilBertForSequenceClassification`.
+Provides the Phase 3 deep learning sequence classification model fine-tuning `TFDistilBertForSequenceClassification` mapping categories to the 5 target business domains.
 
 ### 7. Pipeline Integration Engine (`utils/pipeline_engine.py`)
 Provides the Phase 4 unified integration and batch-processing optimization engine.
 
 ### 8. Interactive Visualization Dashboard (`app/real_time_dashboard.py`)
 Provides the Phase 5 interactive Streamlit dashboard.
+
+### 9. Validation Reports (`reports/` & `notebooks/`)
+* `reports/performance_metrics.json`: Piles model accuracy, macro F1, and throughput benchmarks.
+* `audit.md`: Self-contained audit answer checks detailing operational demonstration steps.
+* `notebooks/EDA_and_Training.ipynb`: Jupyter Notebook documenting exploratory analyses, preprocessing splits, and transfer learning fine-tuning.
 
 ---
 
