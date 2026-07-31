@@ -93,12 +93,12 @@ class DistilBertClassifier:
         train_labels: np.ndarray,
         val_inputs: Dict[str, np.ndarray],
         val_labels: np.ndarray,
-        epochs: int = 5,
+        epochs: int = 10,
         batch_size: int = 16,
         checkpoint_dir: str = "models/checkpoints"
     ):
         """
-        Trains the classifier on tokenized inputs and labels using a custom GradientTape loop.
+        Trains the classifier on tokenized inputs and labels using Keras fit() with EarlyStopping.
         Saves best checkpoint weights based on validation loss.
 
         Args:
@@ -120,115 +120,101 @@ class DistilBertClassifier:
         logger.info(f"Saving model configuration to '{checkpoint_dir}/config.json'...")
         self.model.config.save_pretrained(checkpoint_dir)
 
-        # Prepare indices for training and validation datasets
-        train_samples = len(train_labels)
-        train_indices = np.arange(train_samples)
+        # Build tf.data datasets to avoid eager graph compile overhead issues
+        train_dataset = tf.data.Dataset.from_tensor_slices((
+            {
+                "input_ids": train_inputs["input_ids"],
+                "attention_mask": train_inputs["attention_mask"]
+            },
+            train_labels
+        )).shuffle(len(train_labels)).batch(batch_size)
 
-        val_samples = len(val_labels)
-        val_indices = np.arange(val_samples)
+        val_dataset = tf.data.Dataset.from_tensor_slices((
+            {
+                "input_ids": val_inputs["input_ids"],
+                "attention_mask": val_inputs["attention_mask"]
+            },
+            val_labels
+        )).batch(batch_size)
 
-        best_val_loss = float("inf")
-        history_dict = {"loss": [], "accuracy": [], "val_loss": [], "val_accuracy": []}
+        # Setup Early Stopping callback
+        early_stopping = tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=2,
+            restore_best_weights=True,
+            verbose=1
+        )
 
-        # Loss function & Optimizer
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        # Custom checkpoint callback to save epochs checkpoints as required by guidelines
+        class EpochCheckpoint(tf.keras.callbacks.Callback):
+            def __init__(self, directory):
+                super().__init__()
+                self.directory = directory
+            def on_epoch_end(self, epoch, logs=None):
+                epoch_checkpoint_path = os.path.join(self.directory, f"text_classifier_epoch_{epoch+1}.h5")
+                print(f"\n  Saving epoch {epoch+1} weights to '{epoch_checkpoint_path}'...", flush=True)
+                self.model.save_weights(epoch_checkpoint_path)
 
-        for epoch in range(epochs):
-            print(f"\nEpoch {epoch+1}/{epochs}", flush=True)
-            logger.info(f"Epoch {epoch+1}/{epochs} starting...")
-            
-            # Epoch Metrics
-            epoch_loss = tf.keras.metrics.Mean()
-            epoch_acc = tf.keras.metrics.SparseCategoricalAccuracy()
+        epoch_checkpoint_callback = EpochCheckpoint(checkpoint_dir)
 
-            # Shuffle training indices at start of each epoch
-            np.random.shuffle(train_indices)
+        # Fit model
+        history = self.model.fit(
+            train_dataset,
+            validation_data=val_dataset,
+            epochs=epochs,
+            callbacks=[early_stopping, epoch_checkpoint_callback],
+            verbose=1
+        )
 
-            # Batch iteration
-            num_train_batches = int(np.ceil(train_samples / batch_size))
-            for step in range(num_train_batches):
-                # Slice current batch indices
-                batch_idx = train_indices[step * batch_size : (step + 1) * batch_size]
-                
-                # Retrieve features and targets for batch
-                x_batch = {
-                    "input_ids": train_inputs["input_ids"][batch_idx],
-                    "attention_mask": train_inputs["attention_mask"][batch_idx]
-                }
-                y_batch = train_labels[batch_idx]
-
-                with tf.GradientTape() as tape:
-                    outputs = self.model(x_batch, training=True)
-                    logits = outputs.logits
-                    loss_value = loss_fn(y_batch, logits)
-                    # Add any internal losses (regularization, etc.)
-                    if self.model.losses:
-                        loss_value += tf.add_n(self.model.losses)
-
-                # Gradients calculation and weight update steps
-                grads = tape.gradient(loss_value, self.model.trainable_variables)
-                self.model.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
-
-                epoch_loss.update_state(loss_value)
-                epoch_acc.update_state(y_batch, logits)
-
-                if step % 5 == 0 or step == num_train_batches - 1:
-                    log_msg = f"  Step {step}/{num_train_batches} - loss: {loss_value.numpy():.4f} - accuracy: {epoch_acc.result().numpy():.4f}"
-                    print(log_msg, flush=True)
-                    logger.info(log_msg)
-
-            # Validation metrics
-            val_loss = tf.keras.metrics.Mean()
-            val_acc = tf.keras.metrics.SparseCategoricalAccuracy()
-
-            num_val_batches = int(np.ceil(val_samples / batch_size))
-            for step in range(num_val_batches):
-                batch_idx = val_indices[step * batch_size : (step + 1) * batch_size]
-                x_batch = {
-                    "input_ids": val_inputs["input_ids"][batch_idx],
-                    "attention_mask": val_inputs["attention_mask"][batch_idx]
-                }
-                y_batch = val_labels[batch_idx]
-
-                outputs = self.model(x_batch, training=False)
-                logits = outputs.logits
-                val_loss_val = loss_fn(y_batch, logits)
-                
-                val_loss.update_state(val_loss_val)
-                val_acc.update_state(y_batch, logits)
-
-            train_l = float(epoch_loss.result().numpy())
-            train_a = float(epoch_acc.result().numpy())
-            val_l = float(val_loss.result().numpy())
-            val_a = float(val_acc.result().numpy())
-
-            print(f"Epoch {epoch+1} Metrics:", flush=True)
-            print(f"  loss: {train_l:.4f} - accuracy: {train_a:.4f} - val_loss: {val_l:.4f} - val_accuracy: {val_a:.4f}", flush=True)
-            logger.info(f"Epoch {epoch+1} - loss: {train_l:.4f} - accuracy: {train_a:.4f} - val_loss: {val_l:.4f} - val_accuracy: {val_a:.4f}")
-
-            history_dict["loss"].append(train_l)
-            history_dict["accuracy"].append(train_a)
-            history_dict["val_loss"].append(val_l)
-            history_dict["val_accuracy"].append(val_a)
-
-            # Save checkpoint after each epoch as required in the guidelines
-            epoch_checkpoint_path = os.path.join(checkpoint_dir, f"text_classifier_epoch_{epoch+1}.h5")
-            print(f"  Saving epoch {epoch+1} weights to '{epoch_checkpoint_path}'...", flush=True)
-            self.model.save_weights(epoch_checkpoint_path)
-
-            # Save absolute best checkpoint weights
-            if val_l < best_val_loss:
-                best_val_loss = val_l
-                print(f"  val_loss improved to {val_l:.4f}. Saving best weights checkpoint...", flush=True)
-                logger.info(f"Validation loss improved to {val_l:.4f}. Saving best weights checkpoint...")
-                self.model.save_weights(checkpoint_path)
+        # Save absolute best weights checkpoint
+        logger.info(f"Saving absolute best weights to '{checkpoint_path}'...")
+        self.model.save_weights(checkpoint_path)
 
         # Export training history to CSV
         history_path = os.path.join(checkpoint_dir, "training_history.csv")
         logger.info(f"Exporting training history to '{history_path}'...")
-        history_df = pd.DataFrame(history_dict)
-        history_df.to_csv(history_path, index=False)
-        logger.info("Training complete and history exported successfully.")
+        history_df = pd.DataFrame(history.history)
+        history_df.index = history_df.index + 1
+        history_df.index.name = "Epoch"
+        history_df.to_csv(history_path)
+        
+        # Display history dataframe
+        print("\n=== TRAINING HISTORY METRICS ===")
+        print(history_df.to_string())
+        print("===============================\n")
+
+        # Generate learning curves
+        try:
+            import matplotlib.pyplot as plt
+            os.makedirs("reports", exist_ok=True)
+            
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+            
+            # Loss curve
+            ax1.plot(history_df.index, history_df["loss"], label="Train Loss", marker="o", color="#e74c3c")
+            ax1.plot(history_df.index, history_df["val_loss"], label="Val Loss", marker="o", color="#3498db")
+            ax1.set_title("Training vs. Validation Loss")
+            ax1.set_xlabel("Epoch")
+            ax1.set_ylabel("Loss")
+            ax1.legend()
+            ax1.grid(True, linestyle="--", alpha=0.6)
+            
+            # Accuracy curve
+            ax2.plot(history_df.index, history_df["accuracy"], label="Train Accuracy", marker="o", color="#2ecc71")
+            ax2.plot(history_df.index, history_df["val_accuracy"], label="Val Accuracy", marker="o", color="#9b59b6")
+            ax2.set_title("Training vs. Validation Accuracy")
+            ax2.set_xlabel("Epoch")
+            ax2.set_ylabel("Accuracy")
+            ax2.legend()
+            ax2.grid(True, linestyle="--", alpha=0.6)
+            
+            plot_path = "reports/learning_curves.png"
+            plt.tight_layout()
+            plt.savefig(plot_path, dpi=150)
+            plt.close()
+            logger.info(f"Learning curves plot successfully exported to '{plot_path}'")
+        except Exception as e:
+            logger.error(f"Failed to generate learning curves plot: {e}")
 
     def load_weights(self, weights_path: str):
         """
@@ -415,9 +401,9 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="DistilBERT Production Training Pipeline")
     parser.add_argument("--sample_size", type=int, default=10000, help="Total production samples to load")
-    parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
-    parser.add_argument("--run_eagerly", action="store_true", help="Compile and run eagerly to avoid graph compile delays")
+    parser.add_argument("--run_eagerly", action="store_true", default=False, help="Compile and run eagerly to avoid graph compile delays")
     args = parser.parse_args()
     
     run_production_training(
