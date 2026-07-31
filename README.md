@@ -131,8 +131,9 @@ PYTHONPATH=. python models/baseline_classifier.py
 
 ### 3. Run DistilBERT Fine-Tuning and Classifier Inference (Phase 3)
 ```bash
-PYTHONPATH=. python models/text_classifier.py
+PYTHONPATH=. python models/text_classifier.py --sample_size 10000 --epochs 10 --batch_size 32
 ```
+This runs compiled graph execution with `tf.data.Dataset` pipelines, integrates `EarlyStopping` callbacks, and automatically exports training curves to `reports/learning_curves.png`.
 
 ### 4. Run Unified Parallel Batch Processing Pipeline (Phase 4)
 ```bash

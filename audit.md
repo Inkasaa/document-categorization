@@ -33,12 +33,12 @@
 ## Model Development
 
 ### 5. Is the text classification model implemented with TensorFlow, and does it incorporate transfer learning?
-**Yes.** The `DistilBertClassifier` (in `models/text_classifier.py`) is implemented using Hugging Face's `TFDistilBertForSequenceClassification` model, which inherits from TensorFlow's `tf.keras.Model`. It uses transfer learning by loading the pre-trained weights of `distilbert-base-multilingual-cased` and fine-tuning it with a custom `tf.GradientTape` training loop.
-* **How to Demonstrate**: Run the training script:
+**Yes.** The `DistilBertClassifier` (in `models/text_classifier.py`) is implemented using Hugging Face's `TFDistilBertForSequenceClassification` model, which inherits from TensorFlow's `tf.keras.Model`. It uses transfer learning by loading the pre-trained weights of `distilbert-base-multilingual-cased` and fine-tuning it using a compiled Keras `model.fit()` execution pipeline.
+* **How to Demonstrate**: Run the production training script:
   ```bash
-  PYTHONPATH=. python models/text_classifier.py --sample_size 1000 --epochs 5 --batch_size 32 --run_eagerly
+  PYTHONPATH=. python models/text_classifier.py --sample_size 10000 --epochs 10 --batch_size 32
   ```
-  The logs will print the loading of the pre-trained Hugging Face TF model, legacy Adam compilation, and epochs metrics.
+  The logs will print the loading of the pre-trained Hugging Face TF model, legacy Adam compilation, Epoch progress steps, and validation loss early stopping callbacks.
 
 ### 6. Has the tagging system been developed with SpaCy and integrated for context-aware tagging?
 **Yes.** The `DocumentTagger` (in `models/tagger.py`) loads language-specific SpaCy models (`en_core_web_sm`, `es_core_news_sm`) to execute Named Entity Recognition (NER), extracting organizations, dates, and locations. It couples this with a rule-based keyword fallback mapping (regex) to assign domain-specific context-aware tags.
@@ -50,7 +50,7 @@
 
 ### 7. Is the real-time processing pipeline efficient and capable of handling high document volumes?
 **Yes.** The `DocumentPipelineEngine` (in `utils/pipeline_engine.py`) implements a parallel `process_batch(texts)` method. Instead of looping requests sequentially, it tokenizes all documents in a single step and executes parallel inference on the model tensor in one call.
-* **How to Demonstrate**: Run the baseline classifier: `PYTHONPATH=. python models/baseline_classifier.py`. It benchmarks the evaluation speed, showing throughputs over **3,000,000+ documents/second** on your CPU.
+* **How to Demonstrate**: Run the baseline classifier: `PYTHONPATH=. python models/baseline_classifier.py`. It benchmarks the evaluation speed, showing throughputs over **1,800,000+ documents/second** on your CPU.
 
 ### 8. Does the system support multi-language detection and handle language-specific tagging accurately?
 **Yes.** The pipeline detects languages dynamically and routes the text to the appropriate SpaCy NER model (English vs. Spanish) so that entities and tags are parsed using language-specific rules.
@@ -61,14 +61,16 @@
 ## Transfer Learning and Model Optimization
 
 ### 9. Has transfer learning been applied to adapt the model to domain-specific contexts?
-**Yes.** The model initializes from the pre-trained multi-language DistilBERT model and fine-tunes on 1,000 balanced documents across the 5 target domains: Finance, General, Noise, Sports, and Technology.
+**Yes.** The model initializes from the pre-trained multi-language DistilBERT model and fine-tunes on 10,000 balanced documents across the 5 target domains: Finance, General, Noise, Sports, and Technology. It automatically halts training via EarlyStopping and restores the absolute best validation checkpoint weights.
 * **How to Demonstrate**: Verify that the checkpoints folder [models/checkpoints/](file:///Users/inka.saavuori/document-categorization/models/checkpoints/) contains the fine-tuned parameters (`text_classifier_best.h5` and epoch checkpoints 1-5).
 
 ### 10. Have model optimization techniques been implemented to improve performance?
 **Yes.** We implemented multiple optimizations:
 - Caching of heavy model pipelines in Streamlit memory (`@st.cache_resource`) so they load once.
+- Early Stopping callback on validation loss (`patience=2`) to prevent overfitting and select the optimal epoch.
+- Automated learning curves plot rendering (`reports/learning_curves.png`) comparing training and validation loss/accuracy across epochs.
 - Using `tf.keras.optimizers.legacy.Adam` to speed up Apple Silicon GPU/CPU graph execution.
-- Direct NumPy array slicing to bypass slow `tf.data.Dataset` C++ iterator blockages.
+- Direct Keras compiled graph pre-fetching to speed up batch iterations.
 * **How to Demonstrate**: View [utils/pipeline_engine.py](file:///Users/inka.saavuori/document-categorization/utils/pipeline_engine.py) to inspect the cache orchestration.
 
 ---
@@ -77,11 +79,11 @@
 
 ### 11. Does the real-time dashboard display categorization and tagging results?
 **Yes.** The Streamlit web interface has interactive sections displaying the Predicted Category, Detected Language, and a list of context tags.
-* **How to Demonstrate**: Launch the app: `streamlit run app/real_time_dashboard.py --server.port 8506` and interact with the UI.
+* **How to Demonstrate**: Launch the app: `streamlit run app/real_time_dashboard.py` and interact with the UI.
 
 ### 12. Are performance metrics, such as processing speed and accuracy, displayed in the dashboard?
-**Yes.** The left sidebar displays real-time telemetry metrics: "Avg Inference Latency" (in ms) and "Avg Classification Confidence" (in %) computed dynamically from the dataset.
-* **How to Demonstrate**: Open `http://localhost:8506` and check the left sidebar panel.
+**Yes.** The left sidebar displays real-time telemetry metrics: "Avg Inference Latency" (in ms) and "Avg Classification Confidence" (in %) computed dynamically from the user's active session.
+* **How to Demonstrate**: Open `http://localhost:8501` (or your active server port) and check the left sidebar panel.
 
 ---
 
