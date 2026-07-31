@@ -198,8 +198,7 @@ raw_input = st.text_area(
 
 process_btn = st.button("🚀 Process Document")
 
-# If user clicks process or has default text
-if process_btn or raw_input:
+if process_btn:
     st.subheader("🔍 Extraction Results")
     
     # Measure execution latency for this specific text run
