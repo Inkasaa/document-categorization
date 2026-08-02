@@ -1,0 +1,8 @@
+Text,Predicted Category,Detected Language,Confidence Score,Tags
+<html><body><p>The <b>Artificial Intelligence (AI)</b> revolution is transforming modern software engineering!!! Visit <a href='http://example.com'>our blog</a> for more details.</p></body></html>,Technology,en,0.9662512540817261,"AI, Software Engineering, Technology, The Artificial Intelligence (Ai (ORG)"
+  El  crecimiento    económico mundial se ha desacelerado en el último trimestre. ¡Las tasas de interés están subiendo! #finanzas #economía  ,Finance,es,0.43144431710243225,"Economy, Finance"
+Le match de football hier soir était incroyable! L'équipe locale a gagné 3-2 à la dernière minute. ⚽🏆,Sports,fr,0.9787730574607849,"Football, Match, Sports, Victory"
+Computational complexity theory is a subfield of theoretical computer science... and it is fascinating! Check out NP-complete problems.,Technology,en,0.7860686182975769,"Computing, Np (ORG), Technology"
+<p>Inversiones en bolsa: ¿Cómo diversificar tu cartera de acciones este año? Consejos de expertos financieros.</p>,Finance,es,0.9408230781555176,"Finance, Financial Services, Investment, Stock Market, Stocks"
+"Short snippets with missing or ambiguous language context can be tricky, like 'hello world' or 'hola'.",Technology,en,0.6507060527801514,
+XYZ!!! 12345 --- Very noisy data with mostly punctuation and numbers.,Noise,en,0.9910688400268555,"12345 - Very (DATE), Xyz (ORG)"

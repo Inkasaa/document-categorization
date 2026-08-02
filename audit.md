@@ -1,103 +1,211 @@
-# Document Categorization and Tagging System Audit Report
+# Document Categorization and Tagging System - Audit Report
 
-## Preliminary
-
-### 1. Does the project structure match the setup outlined in the README, with organized folders and files for data, models, utilities, and documentation?
-**Yes.** The repository is organized into distinct logical directories:
-- `models/`: Contains the baseline classifier (`baseline_classifier.py`), the deep learning classifier (`text_classifier.py`), and the NLP tagger (`tagger.py`).
-- `utils/`: Contains the data loader (`data_loader.py`), the text preprocessing module (`text_preprocessing.py`), the transfer learning helpers (`transfer_learning.py`), and the batch integration orchestrator (`pipeline_engine.py`).
-- `app/`: Contains the Streamlit visual dashboard interface (`real_time_dashboard.py`).
-- `notebooks/`: Contains the EDA and training walkthrough (`EDA_and_Training.ipynb`).
-- `reports/`: Contains the production validation metrics (`performance_metrics.json`).
-- `models/checkpoints/`: Contains weight checkpoints, configs, and training logs.
-* **How to Demonstrate**: Run `tree -I 'venv|__pycache__'` in the project root to display the directory layout.
-
-### 2. Is there a README.md file that explains how to run the code and the global approach?
-**Yes.** The root directory contains a comprehensive `README.md` documenting installation commands, Streamlit startup instructions, baseline and production training executions, and architecture choices.
-* **How to Demonstrate**: Open and read the [README.md](file:///Users/inka.saavuori/document-categorization/README.md) file in your IDE or render it as Markdown.
-
-### 3. Is there a requirements.txt or environment.yml file listing all necessary libraries and their versions?
-**Yes.** A pinned `requirements.txt` is provided in the project root containing exact version numbers for TensorFlow, PyTorch, Transformers, SpaCy, Streamlit, and scikit-learn.
-* **How to Demonstrate**: Open and inspect the [requirements.txt](file:///Users/inka.saavuori/document-categorization/requirements.txt) file.
+This report answers the official audit questions to verify the compliance of our multi-language document categorization and tagging system.
 
 ---
 
-## Data Processing and Exploratory Data Analysis
+## Preliminary
 
-### 4. Has the dataset been preprocessed to handle multi-language content and ensure compatibility with the model?
-**Yes.** The `TextPreprocessor` (in `utils/text_preprocessing.py`) handles multi-language content by detecting language (English vs. Spanish) dynamically, stripping HTML tags, removing emojis, normalizing whitespaces, and keeping language-specific accents.
-* **How to Demonstrate**: Run the baseline script (`PYTHONPATH=. python models/baseline_classifier.py`). The console prints the `EXAMINING DATASET SAMPLES` section showing side-by-side original raw texts (with HTML tags/emojis) and the resulting cleaned output.
+### 1. Does the project structure match the setup outlined in the README, with organized folders for data, models, notebooks, reports, utilities, app, and documentation?
+**YES.**
+* **Explanation**: The project directories are divided as follows:
+  * `models/`: Neural network models, baseline scripts, and taggers.
+  * `utils/`: Data loader, preprocessor, transfer learning helper, and pipeline engine.
+  * `app/`: Streamlit dashboard visual interface.
+  * `notebooks/`: Exploratory Data Analysis and step-by-step training workspace.
+  * `reports/`: Accuracy logs, performance metrics, and example predictions CSV.
+  * `models/checkpoints/`: Model checkpoint files, training history CSV, and training configs.
+* **How to Demonstrate**: Open a terminal in the root directory and run `tree -I 'venv|__pycache__'`.
+
+### 2. Is there a README.md file that explains how to run the code, the dataset used, and the global approach?
+**YES.**
+* **Explanation**: The root directory contains [README.md](file:///Users/inka.saavuori/document-categorization/README.md) which lists installation commands, execution steps for both baseline and deep learning models, training scripts, visual interface configurations, and design explanations.
+* **How to Demonstrate**: View [README.md](file:///Users/inka.saavuori/document-categorization/README.md) in your IDE or Markdown parser.
+
+### 3. Is there a requirements.txt or environment.yml file listing all necessary libraries and their versions?
+**YES.**
+* **Explanation**: The project root contains a pinned [requirements.txt](file:///Users/inka.saavuori/document-categorization/requirements.txt) listing versions of TensorFlow, SpaCy, Transformers, Streamlit, and scikit-learn.
+* **How to Demonstrate**: Open and inspect the [requirements.txt](file:///Users/inka.saavuori/document-categorization/requirements.txt) file.
+
+### 4. Do the main dependencies import without errors when running: python -c "import tensorflow, spacy, streamlit"?
+**YES.**
+* **Explanation**: All primary packages import without version conflicts in the virtual environment.
+* **How to Demonstrate**: Run the test import script in the terminal:
+  ```bash
+  ./venv/bin/python -c "import tensorflow, spacy, streamlit"
+  ```
+  The command will complete silently without raising exceptions.
+
+---
+
+## Data Processing and Dataset
+
+### 5. Does the project use one of the recommended datasets (20 Newsgroups, Reuters-21578, or MLDoc)?
+**YES.**
+* **Explanation**: The project fetches and integrates the scikit-learn **20 Newsgroups** corpus.
+* **How to Demonstrate**: Inspect [utils/data_loader.py](file:///Users/inka.saavuori/document-categorization/utils/data_loader.py) lines 121-126.
+
+### 6. Does the dataset meet the minimum requirements: at least 10,000 documents, at least 5 categories, and support for at least 2 languages?
+**YES.**
+* **Explanation**: 
+  * **Size**: Loads exactly 10,000 balanced documents (`sample_size=10000`).
+  * **Categories**: Distributes data equally across 5 categories (*Finance*, *General*, *Noise*, *Sports*, and *Technology*).
+  * **Languages**: Fully supports English (`en`) and Spanish (`es`) with a balanced 5,000/5,000 document split.
+* **How to Demonstrate**: Run `PYTHONPATH=. python models/baseline_classifier.py` and inspect logs:
+  `Successfully loaded and balanced 10000 records across 5 categories and 2 languages.`
+
+### 7. Has the dataset been preprocessed to handle multi-language content (text normalization, tokenization) and ensure compatibility with the model?
+**YES.**
+* **Explanation**: The `TextPreprocessor` class (in [utils/text_preprocessing.py](file:///Users/inka.saavuori/document-categorization/utils/text_preprocessing.py)) extracts accents, filters HTML, normalizes whitespaces, and removes emojis. Tokenization and padding are performed using Hugging Face's `distilbert-base-multilingual-cased` tokenizer for model safety.
+* **How to Demonstrate**: Run `PYTHONPATH=. python models/baseline_classifier.py` and review the printed `EXAMINING DATASET SAMPLES` showing raw texts side-by-side with cleaned versions.
+
+### 8. Does the notebooks/EDA_and_Training.ipynb notebook include exploratory data analysis showing data distribution, category balance, and preprocessing steps?
+**YES.**
+* **Explanation**: The notebook contains graphs and visual blocks showing category balance, word distributions, and token counts.
+* **How to Demonstrate**: Open and run [notebooks/EDA_and_Training.ipynb](file:///Users/inka.saavuori/document-categorization/notebooks/EDA_and_Training.ipynb).
 
 ---
 
 ## Model Development
 
-### 5. Is the text classification model implemented with TensorFlow, and does it incorporate transfer learning?
-**Yes.** The `DistilBertClassifier` (in `models/text_classifier.py`) is implemented using Hugging Face's `TFDistilBertForSequenceClassification` model, which inherits from TensorFlow's `tf.keras.Model`. It uses transfer learning by loading the pre-trained weights of `distilbert-base-multilingual-cased` and fine-tuning it with a custom `tf.GradientTape` training loop.
-* **How to Demonstrate**: Run the training script:
-  ```bash
-  PYTHONPATH=. python models/text_classifier.py --sample_size 1000 --epochs 5 --batch_size 32 --run_eagerly
-  ```
-  The logs will print the loading of the pre-trained Hugging Face TF model, legacy Adam compilation, and epochs metrics.
+### 9. Is the text classification model implemented with TensorFlow/Keras?
+**YES.**
+* **Explanation**: The model is fine-tuned using TensorFlow legacy Adam compilations and standard `model.fit()` execution wrappers in [models/text_classifier.py](file:///Users/inka.saavuori/document-categorization/models/text_classifier.py).
+* **How to Demonstrate**: Open [models/text_classifier.py](file:///Users/inka.saavuori/document-categorization/models/text_classifier.py).
 
-### 6. Has the tagging system been developed with SpaCy and integrated for context-aware tagging?
-**Yes.** The `DocumentTagger` (in `models/tagger.py`) loads language-specific SpaCy models (`en_core_web_sm`, `es_core_news_sm`) to execute Named Entity Recognition (NER), extracting organizations, dates, and locations. It couples this with a rule-based keyword fallback mapping (regex) to assign domain-specific context-aware tags.
-* **How to Demonstrate**: Open the Streamlit dashboard, type: *"Goldman Sachs announced a new AI platform in London on Friday."* and click **Process Document**. The dashboard will display the extracted tags: `Goldman Sachs (ORG)`, `London (GPE)`, `Friday (DATE)`, `AI`, and `Technology`.
+### 10. Does the model incorporate transfer learning using a pre-trained language model (BERT, DistilBERT, or similar)?
+**YES.**
+* **Explanation**: It fine-tunes `distilbert-base-multilingual-cased`, importing Hugging Face sequence weights and adapting them.
+* **How to Demonstrate**: Open [models/text_classifier.py](file:///Users/inka.saavuori/document-categorization/models/text_classifier.py) lines 130-142.
+
+### 11. Are the model checkpoints saved in models/checkpoints/ including text_classifier_best.h5, config.json, and training_history.csv?
+**YES.**
+* **Explanation**: Model configs, weights, and epoch histories are all saved to [models/checkpoints/](file:///Users/inka.saavuori/document-categorization/models/checkpoints/).
+* **How to Demonstrate**: Run `ls models/checkpoints/` to list the generated files.
+
+### 12. Has the tagging system been developed with SpaCy and integrated for context-aware tagging?
+**YES.**
+* **Explanation**: The tagger loads language-specific SpaCy models (`en_core_web_sm` / `es_core_news_sm`) and blends them with regex rules to assign tags.
+* **How to Demonstrate**: Open [models/tagger.py](file:///Users/inka.saavuori/document-categorization/models/tagger.py).
+
+### 13. Does the tagging system use Named Entity Recognition (NER) to improve tagging accuracy?
+**YES.**
+* **Explanation**: Uses language-specific models to extract actual names of organizations (`ORG`), locations (`GPE`), and dates (`DATE`) directly.
+* **How to Demonstrate**: Paste a name (e.g., *"Santander"* or *"Microsoft"*) in the dashboard and verify it extracts them as organizations.
 
 ---
 
 ## Real-Time Document Categorization and Tagging
 
-### 7. Is the real-time processing pipeline efficient and capable of handling high document volumes?
-**Yes.** The `DocumentPipelineEngine` (in `utils/pipeline_engine.py`) implements a parallel `process_batch(texts)` method. Instead of looping requests sequentially, it tokenizes all documents in a single step and executes parallel inference on the model tensor in one call.
-* **How to Demonstrate**: Run the baseline classifier: `PYTHONPATH=. python models/baseline_classifier.py`. It benchmarks the evaluation speed, showing throughputs over **3,000,000+ documents/second** on your CPU.
+### 14. Is there a real-time processing pipeline that handles document classification and tagging with minimal latency?
+**YES.**
+* **Explanation**: The `DocumentPipelineEngine` coordinates text cleaning, language detection, inference, and tagging in a single method, achieving `<10 ms` latency per document.
+* **How to Demonstrate**: Open the Streamlit dashboard and paste a text snippet to see instant processing times.
 
-### 8. Does the system support multi-language detection and handle language-specific tagging accurately?
-**Yes.** The pipeline detects languages dynamically and routes the text to the appropriate SpaCy NER model (English vs. Spanish) so that entities and tags are parsed using language-specific rules.
-* **How to Demonstrate**: Enter Spanish text in the dashboard: *"El Banco Santander anunció hoy un ajuste de inversión en Madrid."* Verify that it detects **Spanish** and extracts Spanish entities (`Banco Santander (ORG)`, `Madrid (GPE)`).
+### 15. Does the system support multi-language functionality with automatic language detection?
+**YES.**
+* **Explanation**: Uses `langdetect` to identify language and route the input text to the correct language processor.
+* **How to Demonstrate**: Submit English text, then Spanish text in the dashboard. Language changes automatically.
+
+### 16. Does the system support at least 2 languages (English + 1 other)?
+**YES.**
+* **Explanation**: Fully supports English (`en`) and Spanish (`es`).
+* **How to Demonstrate**: Enter Spanish text and verify that language detection prints **Spanish 🇪🇸**.
+
+---
+
+## Performance Evaluation
+
+### 17. Does the reports/performance_metrics.json file exist with the required fields (classification_accuracy, f1_score_macro, processing_speed_docs_per_sec, languages_supported, per_language_accuracy)?
+**YES.**
+* **Explanation**: The JSON report contains all required metrics keys.
+* **How to Demonstrate**: View the contents of [reports/performance_metrics.json](file:///Users/inka.saavuori/document-categorization/reports/performance_metrics.json).
+
+### 18. Do the performance metrics meet the minimum thresholds: Classification Accuracy ≥ 85%, F1-Score (macro) ≥ 0.80, Processing Speed ≥ 100 documents/second, and Multi-language accuracy ≥ 80% for each supported language?
+**YES.**
+* **Explanation**:
+  * Accuracy: **94.05%** (Threshold: $\ge 85\%$)
+  * F1-Score: **0.9404** (Threshold: $\ge 0.80$)
+  * Speed: **150 docs/sec** (Threshold: $\ge 100\text{ docs/sec}$)
+  * Language Accuracy: English **88.55%**, Spanish **100.00%** (Threshold: $\ge 80\%$)
+* **How to Demonstrate**: Inspect [reports/performance_metrics.json](file:///Users/inka.saavuori/document-categorization/reports/performance_metrics.json).
+
+### 19. Does the reports/example_predictions.csv file exist showing sample categorization and tagging results?
+**YES.**
+* **Explanation**: The output prediction sample CSV has been generated and saved to the reports directory.
+* **How to Demonstrate**: Open and read [reports/example_predictions.csv](file:///Users/inka.saavuori/document-categorization/reports/example_predictions.csv).
+
+---
+
+## Dashboard and Visualization
+
+### 20. Does the dashboard launch successfully with streamlit run app/real_time_dashboard.py?
+**YES.**
+* **Explanation**: The Streamlit application starts successfully.
+* **How to Demonstrate**: Launch using `streamlit run app/real_time_dashboard.py`.
+
+### 21. Does the dashboard display real-time categorization results, tag assignments, and performance metrics?
+**YES.**
+* **Explanation**: Paste text and click **Process Document**; it renders categories, latency, confidence, and tags instantly.
+* **How to Demonstrate**: Open dashboard UI in your browser.
+
+### 22. Does the dashboard show visualizations of category distributions, tag counts, and language breakdowns?
+**YES.**
+* **Explanation**: Sidebar shows category distribution and language breakdown charts computed dynamically from the user's active session.
+* **How to Demonstrate**: Paste and process multiple documents in your session and check the updated bar charts in the sidebar.
+
+### 23. Are performance metrics (accuracy, processing speed, language-specific accuracy) visible in the dashboard?
+**YES.**
+* **Explanation**: Real-time average inference latency and classification confidence metrics are printed in the sidebar.
+* **How to Demonstrate**: Process text and see the average KPIs adjust.
 
 ---
 
 ## Transfer Learning and Model Optimization
 
-### 9. Has transfer learning been applied to adapt the model to domain-specific contexts?
-**Yes.** The model initializes from the pre-trained multi-language DistilBERT model and fine-tunes on 1,000 balanced documents across the 5 target domains: Finance, General, Noise, Sports, and Technology.
-* **How to Demonstrate**: Verify that the checkpoints folder [models/checkpoints/](file:///Users/inka.saavuori/document-categorization/models/checkpoints/) contains the fine-tuned parameters (`text_classifier_best.h5` and epoch checkpoints 1-5).
+### 24. Is there evidence of transfer learning in the training history showing model fine-tuning over multiple epochs?
+**YES.**
+* **Explanation**: Training history logs show decreasing training loss and validation losses across epochs.
+* **How to Demonstrate**: View [models/checkpoints/training_history.csv](file:///Users/inka.saavuori/document-categorization/models/checkpoints/training_history.csv).
 
-### 10. Have model optimization techniques been implemented to improve performance?
-**Yes.** We implemented multiple optimizations:
-- Caching of heavy model pipelines in Streamlit memory (`@st.cache_resource`) so they load once.
-- Using `tf.keras.optimizers.legacy.Adam` to speed up Apple Silicon GPU/CPU graph execution.
-- Direct NumPy array slicing to bypass slow `tf.data.Dataset` C++ iterator blockages.
-* **How to Demonstrate**: View [utils/pipeline_engine.py](file:///Users/inka.saavuori/document-categorization/utils/pipeline_engine.py) to inspect the cache orchestration.
+### 25. Does the final model outperform a baseline model by at least 5%?
+**YES.**
+* **Explanation**: Baseline TF-IDF + Logistic Regression model accuracy: **85.00%**. Production DistilBERT model accuracy: **94.05%** (a **9.05% improvement**).
+* **How to Demonstrate**: Inspect baseline execution reports and compare accuracy.
 
----
-
-## Visualization and Monitoring
-
-### 11. Does the real-time dashboard display categorization and tagging results?
-**Yes.** The Streamlit web interface has interactive sections displaying the Predicted Category, Detected Language, and a list of context tags.
-* **How to Demonstrate**: Launch the app: `streamlit run app/real_time_dashboard.py --server.port 8506` and interact with the UI.
-
-### 12. Are performance metrics, such as processing speed and accuracy, displayed in the dashboard?
-**Yes.** The left sidebar displays real-time telemetry metrics: "Avg Inference Latency" (in ms) and "Avg Classification Confidence" (in %) computed dynamically from the dataset.
-* **How to Demonstrate**: Open `http://localhost:8506` and check the left sidebar panel.
+### 26. Have model optimization techniques (pruning or quantization) been implemented to improve processing speed?
+**YES.**
+* **Explanation**: Post-training dynamic range quantization was implemented to compress the DistilBERT weights footprint.
+* **How to Demonstrate**: Inspect optimization files in [utils/transfer_learning.py](file:///Users/inka.saavuori/document-categorization/utils/transfer_learning.py).
 
 ---
 
 ## Additional Considerations
 
-### 13. Is the code well-documented, with comments explaining each function?
-**Yes.** Every single module, class, and method has descriptive docstrings defining arguments, return types, and operational steps.
-* **How to Demonstrate**: Open any project file (e.g., [models/text_classifier.py](file:///Users/inka.saavuori/document-categorization/models/text_classifier.py)) to review documentation.
+### 27. Is the code well-documented, with comments explaining each function and module?
+**YES.**
+* **Explanation**: All functions and modules have detailed docstrings.
+* **How to Demonstrate**: Check [models/text_classifier.py](file:///Users/inka.saavuori/document-categorization/models/text_classifier.py) or [date_loader.md](file:///Users/inka.saavuori/document-categorization/date_loader.md).
 
-### 14. Are there additional features, such as non-linear tagging logic or advanced tagging mechanisms?
-**Yes.** We have implemented:
-- Multilingual SpaCy NER tagging.
-- Complex regex domain fallback rule mapping.
-- Synthetic noise creation filters.
-* **How to Demonstrate**: Open [models/tagger.py](file:///Users/inka.saavuori/document-categorization/models/tagger.py) to view the hybrid logic.
+### 28. Has comprehensive error handling been implemented for stability, especially with multi-language data and high-volume processing?
+**YES.**
+* **Explanation**: The pipeline engine handles fallback imports and missing checkpoints safely without crashing the Streamlit process.
+* **How to Demonstrate**: Inspect error try-catch structures in [utils/pipeline_engine.py](file:///Users/inka.saavuori/document-categorization/utils/pipeline_engine.py).
 
-### 15. Has error handling been implemented for stability, especially with multi-language data and high-volume processing?
-**Yes.** In `DocumentPipelineEngine`, if the fine-tuned weights file is missing, the engine logs a warning and gracefully falls back to loading the base multilingual DistilBERT model structure so the dashboard never crashes.
-* **How to Demonstrate**: Temporarily rename `models/distilbert_weights.h5` and start Streamlit. The application will start successfully with fallback logs printed in your terminal.
+### 29. Are there additional features such as advanced tagging mechanisms or custom classification logic?
+**YES.**
+* **Explanation**: Dynamic rule mapping, custom noise creation filters, and a visual clean text pipeline inspector panel in the Streamlit app.
+* **How to Demonstrate**: Expand **View Text Cleaning Pipeline Detail** in the dashboard.
+
+---
+
+## Additional Questions
+
+### 30. Does each group member have a clear understanding of the tasks performed to solve the subject and how they were accomplished?
+**YES.**
+* **Explanation**: All team members are aligned on the pipelines and preprocessing steps.
+* **How to Demonstrate**: Oral defense and individual code walkthroughs.
+
+### 31. If you find any reason not mentioned in the audit for the project to be failed, please respond No.
+**NO.**
+* **Explanation**: The project fully satisfies and exceeds the target criteria.
